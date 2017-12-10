@@ -3262,6 +3262,20 @@ Note: Duplicate elements of `kill-ring' are always deleted."
   :group 'ivy
   :type 'integer)
 
+(defun counsel--indent-rigidly (prefix str)
+  ""
+  (with-temp-buffer
+    (insert prefix ?\s str)
+    (goto-char (point-min))
+    (indent-rigidly (line-beginning-position 2)
+                    (point-max)
+                    (1+ (string-width prefix)))
+    (buffer-string)))
+
+(defun counsel--evil-registers-contents ()
+  ""
+  )
+
 (defun counsel-evil-registers ()
   "Ivy replacement for `evil-show-registers'."
   (interactive)
@@ -3270,7 +3284,11 @@ Note: Duplicate elements of `kill-ring' are always deleted."
             (ivy-height counsel-evil-registers-height))
         (ivy-read "evil-registers: "
                   (cl-loop for (key . val) in (evil-register-list)
-                     collect (format "[%c]: %s" key (if (stringp val) val "")))
+                           collect
+                           (let ((prefix (format "[%c]:" key)))
+                             (if val
+                                 (counsel--indent-rigidly prefix val)
+                               prefix)))
                   :require-match t
                   :action #'counsel-evil-registers-action
                   :caller 'counsel-evil-registers))
@@ -3282,7 +3300,7 @@ Note: Duplicate elements of `kill-ring' are always deleted."
 S will be of the form \"[register]: content\"."
   (with-ivy-window
     (insert
-     (replace-regexp-in-string "\\`\\[.*?\\]: " "" s))))
+     (replace-regexp-in-string "\\`\\[.*?\\]: ?" "" s))))
 
 ;;** `counsel-imenu'
 (defvar imenu-auto-rescan)
