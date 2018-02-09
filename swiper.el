@@ -301,15 +301,12 @@
       (memq major-mode swiper-font-lock-exclude)))
 
 (defun swiper-font-lock-ensure ()
-  "Ensure the entired buffer is highlighted."
+  "Ensure the entire buffer is highlighted."
   (unless (swiper-font-lock-ensure-p)
-    (unless (or (> (buffer-size) 100000) (null font-lock-mode))
+    (when (and font-lock-mode (<= (buffer-size) 100000))
       (if (fboundp 'font-lock-ensure)
           (font-lock-ensure)
         (with-no-warnings (font-lock-fontify-buffer))))))
-
-(defvar swiper--format-spec ""
-  "Store the current candidates format spec.")
 
 (defvar swiper--width nil
   "Store the number of digits needed for the longest line nubmer.")
@@ -343,23 +340,26 @@
 
 (declare-function outline-show-all "outline")
 
+;; FIXME: Remember to remove `swiper--format-spec' from `swiper-helm' as well.
+;; TODO: See whether #29 and #1056 can be fixed.
+;; TODO: Can we use native display numbers in any way?
+;; TODO: Support narrowing and link to #149
+
 (defun swiper--candidates (&optional numbers-width)
-  "Return a list of this buffer lines.
+  "Return a list of lines in the current buffer.
 
 NUMBERS-WIDTH, when specified, is used for width spec of line
 numbers; replaces calculating the width from buffer line count."
-  (if (and visual-line-mode
-           ;; super-slow otherwise
-           (< (buffer-size) 20000))
-      (progn
-        (when (eq major-mode 'org-mode)
-          (require 'outline)
-          (if (fboundp 'outline-show-all)
-              (outline-show-all)
-            (with-no-warnings
-              (show-all))))
-        (setq swiper-use-visual-line t))
-    (setq swiper-use-visual-line nil))
+  (setq swiper-use-visual-line (and visual-line-mode
+                                    ;; Super-slow otherwise
+                                    (< (buffer-size) 20000)))
+  (when (and swiper-use-visual-line
+             (eq major-mode 'org-mode))
+    (require 'outline)
+    (if (fboundp 'outline-show-all)
+        (outline-show-all)
+      (with-no-warnings
+        (show-all))))
   (let ((n-lines (count-lines (point-min) (point-max))))
     (unless (zerop n-lines)
       (setq swiper--width (or numbers-width
@@ -600,11 +600,11 @@ Matched candidates should have `swiper-invocation-face'."
   (let ((overlays (overlays-at (1- (point))))
         ov expose)
     (while (setq ov (pop overlays))
-      (if (and (invisible-p (overlay-get ov 'invisible))
-               (setq expose (overlay-get ov 'isearch-open-invisible)))
-          (funcall expose ov)))))
+      (when (and (invisible-p (overlay-get ov 'invisible))
+                 (setq expose (overlay-get ov 'isearch-open-invisible)))
+        (funcall expose ov)))))
 
-(defvar swiper--overlays nil
+(defvar swiper--overlays ()
   "Store overlays.")
 
 (defun swiper--cleanup ()
@@ -842,8 +842,7 @@ otherwise continue prompting for buffers."
                               ivy-alt-done
                               ivy-immediate-done))
          (setq swiper-multi-candidates
-               (swiper--multi-candidates
-                (mapcar #'get-buffer swiper-multi-buffers))))
+               (swiper--multi-candidates swiper-multi-buffers)))
         ((eq this-command 'ivy-call)
          (with-selected-window (active-minibuffer-window)
            (delete-minibuffer-contents)))))
@@ -993,14 +992,26 @@ See `ivy-format-function' for further information."
             (swiper--add-overlays (ivy--regex ivy-text))))))))
 
 (defun swiper--multi-candidates (buffers)
+  ""
+  (let (res)
+    (dolist (buf buffers)
+      (with-current-buffer buf
+        (let* ((name (buffer-name))
+               (name-width (string-width name)))
+          ;; FIXME: Do not hard-code line number width.
+          (dolist (cand (swiper--candidates 4))
+            (push (
+    (nreverse res)))
+
+;; FIXME: Use minibuffer/window/frame text width, exclude fringes, borders, etc.
+(defun swiper--multi-candidates (buffers)
   "Extract candidates from BUFFERS."
   (let* ((ww (window-width))
          (res nil)
-         (column-2 (apply #'max
-                          (mapcar
-                           (lambda (b)
-                             (length (buffer-name b)))
-                           buffers)))
+         (column-2 (apply #'max 0
+                          (mapcar (lambda (b)
+                                    (string-width (buffer-name b)))
+                                  buffers)))
          (column-1 (- ww 4 column-2 1)))
     (dolist (buf buffers)
       (with-current-buffer buf
@@ -1014,9 +1025,8 @@ See `ivy-format-function' for further information."
                      (1- len) len 'display
                      (concat
                       (make-string
-                       (max 0
-                            (- ww (string-width s) (length (buffer-name)) 3))
-                       ?\ )
+                       (max 0 (- ww (string-width s) (string-width (buffer-name)) 3))
+                       ?\s)
                       (buffer-name))
                      s)
                     (put-text-property 0 len 'buffer buf s)
