@@ -585,15 +585,13 @@ to `ivy-highlight-face'."
 (defun counsel--setq-doconst (x)
   "Return a cons of description and value for X.
 X is an item of a radio- or choice-type defcustom."
-  (let (y)
-    (when (and (listp x)
-               (consp (setq y (last x))))
-      (unless (equal y '(function))
-        (setq x (car y))
-        (cons (prin1-to-string x)
-              (if (symbolp x)
-                  (list 'quote x)
-                x))))))
+  (when (consp (setq x (last x)))
+    (setq x (car x))
+    (unless (eq x 'function)
+      (cons (prin1-to-string x)
+            (if (symbolp x)
+                (list 'quote x)
+              x)))))
 
 ;;;###autoload
 (defun counsel-set-variable (sym)
@@ -4258,9 +4256,9 @@ candidate."
   "Show the history of commands."
   (interactive)
   (ivy-read "%d Command: " (mapcar #'prin1-to-string command-history)
-          :require-match t
-          :action #'counsel-command-history-action-eval
-          :caller 'counsel-command-history))
+            :require-match t
+            :action #'counsel-command-history-action-eval
+            :caller 'counsel-command-history))
 
 ;;** `counsel-org-agenda-headlines'
 (defvar org-odd-levels-only)
