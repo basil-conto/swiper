@@ -45,6 +45,7 @@
 (require 'esh-util)
 (require 'compile)
 (require 'dired)
+(require 'files)
 
 (defface counsel-key-binding
   '((t :inherit font-lock-keyword-face))
