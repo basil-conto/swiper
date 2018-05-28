@@ -4523,57 +4523,101 @@ If there is no such buffer, start a new `shell' with NAME."
   (car (file-expand-wildcards "~/.mozilla/firefox/*/bookmarks.html"))
   "Firefox's automatically exported HTML bookmarks file.")
 
-(defun counsel-firefox-bookmarks-action (x)
-  "Browse candidate X."
+(defun counsel-firefox-bookmarks-browse (x)
+  "Browse `counsel-firefox-bookmarks' candidate X."
   (browse-url (get-text-property 0 'href x)))
+
+(defun counsel--firefox-bookmarks-cand (href text tags)
+  "Propertize a string candidate for `counsel-firefox-bookmarks'.
+HREF is the bookmark's non-empty URL.  TEXT is the bookmark's
+description, which, when empty, defaults to HREF.  TAGS, when
+non-nil, is a string of comma-separated tags to append to TEXT."
+  (when (member text '(nil ""))
+    (setq text href))
+  (put-text-property 0 1 'href href text)
+  (if tags
+      (concat text " :" (subst-char-in-string ?, ?: tags t) ":")
+    text))
+
+(defun counsel--firefox-bookmarks-libxml ()
+  "Parse current buffer contents as Firefox HTML bookmarks.
+Return list of propertized string candidates for
+`counsel-firefox-bookmarks'.
+Note: This function requires libxml2 support."
+  ;; Perform iterative pre-order depth-first search instead of using
+  ;; `dom.el' because the latter is new to Emacs 25 and uses recursion.
+  (let ((stack (cddr (libxml-parse-html-region (point-min) (point-max))))
+        cands)
+    (while (let ((node (pop stack)))
+             (if (eq (car-safe node) 'a)
+                 (let* ((text (cl-caddr node))
+                        (attrs (cadr node))
+                        (href (cdr (assq 'href attrs)))
+                        (tags (cdr (assq 'tags attrs))))
+                   (unless (equal href "")
+                     (push (counsel--firefox-bookmarks-cand href text tags)
+                           cands)))
+               (dolist (child (nreverse (cddr node)))
+                 (when (consp child)
+                   (push child stack))))
+             stack))
+    cands))
 
 (declare-function xml-substitute-special "xml")
 
-(defun counsel-firefox-bookmarks--candidates ()
+(defun counsel--firefox-bookmarks-regexp ()
+  "Like `counsel--firefox-bookmarks-libxml', but using regexps.
+This function is used when Emacs lacks libxml support."
+  (require 'xml)
+  (let ((case-fold-search t)
+        cands)
+    (while (re-search-forward
+            "<a href=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]*?\\)</a>" nil t)
+      (let* ((a (match-string 0))
+             (href (match-string 1))
+             (text (save-match-data
+                     (xml-substitute-special (match-string 2))))
+             (tags (and (string-match "tags=\"\\([^\"]+?\\)\"" a)
+                        (match-string 1 a))))
+        (push (counsel--firefox-bookmarks-cand href text tags) cands)))
+    cands))
+
+(defalias 'counsel--libxml-available-p
+  (if (fboundp 'libxml-available-p)
+      #'libxml-available-p
+    (lambda ()
+      (and (fboundp 'libxml-parse-xml-region)
+           (with-temp-buffer
+             (insert "<xml/>")
+             (libxml-parse-xml-region (point-min) (point))))))
+  "Compatibility shim for `libxml-available-p'.
+See URL `https://lists.gnu.org/archive/html/emacs-devel/2017-10\
+/msg00687.html'.")
+
+(defun counsel--firefox-bookmarks ()
   "Return list of `counsel-firefox-bookmarks' candidates."
   (unless (and counsel-firefox-bookmarks-file
                (file-readable-p counsel-firefox-bookmarks-file))
     (signal 'file-error (list "Opening `counsel-firefox-bookmarks-file'"
                               "No such readable file"
                               counsel-firefox-bookmarks-file)))
-  (require 'xml)
   (with-temp-buffer
     (insert-file-contents counsel-firefox-bookmarks-file)
-    (let ((case-fold-search t)
-          candidates)
-      (while (re-search-forward
-              "<a href=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</a>" nil t)
-        (let* ((a (match-string 0))
-               (href (match-string 1))
-               (text (save-match-data
-                       (xml-substitute-special (match-string 2))))
-               (tags (and (string-match "tags=\"\\([^\"]+?\\)\"" a)
-                          (concat " :" (subst-char-in-string
-                                        ?, ?: (match-string 1 a) t)
-                                  ":")))
-               (cand (if tags (concat text tags) text)))
-          (put-text-property 0 (length cand) 'href href cand)
-          (push cand candidates)))
-      candidates)))
+    (if (counsel--libxml-available-p)
+        (counsel--firefox-bookmarks-libxml)
+      (counsel--firefox-bookmarks-regexp))))
 
 ;;;###autoload
 (defun counsel-firefox-bookmarks ()
-  "Ivy interface of firefox bookmarks.
-You will have to enable html bookmarks in firefox:
-open \"about:config\" in firefox and double click on this line to enable value
-to true:
-
-    user_pref(\"browser.bookmarks.autoExportHTML\", false);
-
-You should have now:
-
-    user_pref(\"browser.bookmarks.autoExportHTML\", true);
-
-After closing firefox, you will be able to browse your bookmarks."
+  "Complete Firefox bookmarks with Ivy.
+This requires HTML bookmark export to be enabled in Firefox.
+To do this, open URL `about:config' in Firefox, make sure that
+the value of the setting \"browser.bookmarks.autoExportHTML\" is
+\"true\" by, say, double-clicking it, and then restart Firefox."
   (interactive)
-  (ivy-read "Firefox Bookmarks: " (counsel-firefox-bookmarks--candidates)
+  (ivy-read "Firefox Bookmarks: " (counsel--firefox-bookmarks)
             :history 'counsel-firefox-bookmarks-history
-            :action 'counsel-firefox-bookmarks-action
+            :action #'counsel-firefox-bookmarks-browse
             :caller 'counsel-firefox-bookmarks
             :require-match t))
 
