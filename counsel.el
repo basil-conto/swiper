@@ -4537,15 +4537,15 @@ If there is no such buffer, start a new `shell' with NAME."
   (let ((candidates))
     (with-temp-buffer
       (insert-file-contents counsel-firefox-bookmarks-file)
-      (goto-char (point-min))
       (while (re-search-forward "<A HREF=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</A>" nil t)
-        (let ((a (match-string 0))
-              (href (match-string 1))
-              (text (match-string 2))
-              (tags nil))
-          (if (string-match "TAGS=\"\\([^\"]+?\\)\"" a)
-              (setq tags (match-string 1 a)))
-          (push (propertize (format "%s%s" text (if tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":") "")) 'href href) candidates))))
+        (let* ((a (match-string 0))
+               (href (match-string 1))
+               (text (match-string 2))
+               (tags (and (string-match "TAGS=\"\\([^\"]+?\\)\"" a)
+                          (match-string 1 a))))
+          (push (propertize (concat text (and tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":")))
+                            'href href)
+                candidates))))
     candidates))
 
 ;;;###autoload
