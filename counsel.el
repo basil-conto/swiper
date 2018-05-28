@@ -4529,21 +4529,24 @@ If there is no such buffer, start a new `shell' with NAME."
 
 (defun counsel-firefox-bookmarks--candidates ()
   "Return list of `counsel-firefox-bookmarks' candidates."
+  (unless (and counsel-firefox-bookmarks-file
+               (file-readable-p counsel-firefox-bookmarks-file))
+    (signal 'file-error (list "Opening `counsel-firefox-bookmarks-file'"
+                              "No such readable file"
+                              counsel-firefox-bookmarks-file)))
   (let ((candidates))
-    (if (and counsel-firefox-bookmarks-file (file-exists-p counsel-firefox-bookmarks-file))
-      (with-temp-buffer
-        (insert-file-contents counsel-firefox-bookmarks-file)
-        (goto-char (point-min))
-        (while (re-search-forward "*?<A HREF=\"\\([^\"]+\\)\"[^>]*>\\([^<]+\\)</A>" nil t)
-          (let ((a (match-string 0))
-                (href (match-string 1))
-                (text (match-string 2))
-                (tags nil))
-            (if (string-match "TAGS=\"\\([^\"]+\\)\"" a)
-                (setq tags (match-string 1 a)))
-            (push (propertize (format "%s%s" text (if tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":") "")) 'href href) candidates))))
-      (warn "`counsel-firefox-bookmarks-file` not exists"))
-      candidates))
+    (with-temp-buffer
+      (insert-file-contents counsel-firefox-bookmarks-file)
+      (goto-char (point-min))
+      (while (re-search-forward "*?<A HREF=\"\\([^\"]+\\)\"[^>]*>\\([^<]+\\)</A>" nil t)
+        (let ((a (match-string 0))
+              (href (match-string 1))
+              (text (match-string 2))
+              (tags nil))
+          (if (string-match "TAGS=\"\\([^\"]+\\)\"" a)
+              (setq tags (match-string 1 a)))
+          (push (propertize (format "%s%s" text (if tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":") "")) 'href href) candidates))))
+    candidates))
 
 ;;;###autoload
 (defun counsel-firefox-bookmarks ()
