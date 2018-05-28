@@ -4528,6 +4528,7 @@ If there is no such buffer, start a new `shell' with NAME."
   (browse-url (get-text-property 0 'href x)))
 
 (defun counsel-firefox-bookmarks--candidates ()
+  "Return list of `counsel-firefox-bookmarks' candidates."
   (let ((candidates))
     (if (and counsel-firefox-bookmarks-file (file-exists-p counsel-firefox-bookmarks-file))
       (with-temp-buffer
