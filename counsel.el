@@ -4534,19 +4534,20 @@ If there is no such buffer, start a new `shell' with NAME."
     (signal 'file-error (list "Opening `counsel-firefox-bookmarks-file'"
                               "No such readable file"
                               counsel-firefox-bookmarks-file)))
-  (let ((candidates))
-    (with-temp-buffer
-      (insert-file-contents counsel-firefox-bookmarks-file)
-      (while (re-search-forward "<A HREF=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</A>" nil t)
+  (with-temp-buffer
+    (insert-file-contents counsel-firefox-bookmarks-file)
+    (let ((case-fold-search t)
+          candidates)
+      (while (re-search-forward "<a href=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</a>" nil t)
         (let* ((a (match-string 0))
                (href (match-string 1))
                (text (match-string 2))
-               (tags (and (string-match "TAGS=\"\\([^\"]+?\\)\"" a)
+               (tags (and (string-match "tags=\"\\([^\"]+?\\)\"" a)
                           (match-string 1 a))))
           (push (propertize (concat text (and tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":")))
                             'href href)
-                candidates))))
-    candidates))
+                candidates)))
+      candidates)))
 
 ;;;###autoload
 (defun counsel-firefox-bookmarks ()
