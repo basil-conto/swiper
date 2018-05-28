@@ -4527,6 +4527,8 @@ If there is no such buffer, start a new `shell' with NAME."
   "Browse candidate X."
   (browse-url (get-text-property 0 'href x)))
 
+(declare-function xml-substitute-special "xml")
+
 (defun counsel-firefox-bookmarks--candidates ()
   "Return list of `counsel-firefox-bookmarks' candidates."
   (unless (and counsel-firefox-bookmarks-file
@@ -4534,6 +4536,7 @@ If there is no such buffer, start a new `shell' with NAME."
     (signal 'file-error (list "Opening `counsel-firefox-bookmarks-file'"
                               "No such readable file"
                               counsel-firefox-bookmarks-file)))
+  (require 'xml)
   (with-temp-buffer
     (insert-file-contents counsel-firefox-bookmarks-file)
     (let ((case-fold-search t)
@@ -4541,7 +4544,8 @@ If there is no such buffer, start a new `shell' with NAME."
       (while (re-search-forward "<a href=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</a>" nil t)
         (let* ((a (match-string 0))
                (href (match-string 1))
-               (text (match-string 2))
+               (text (save-match-data
+                       (xml-substitute-special (match-string 2))))
                (tags (and (string-match "tags=\"\\([^\"]+?\\)\"" a)
                           (match-string 1 a))))
           (push (propertize (concat text (and tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":")))
