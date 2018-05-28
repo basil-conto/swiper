@@ -4541,16 +4541,19 @@ If there is no such buffer, start a new `shell' with NAME."
     (insert-file-contents counsel-firefox-bookmarks-file)
     (let ((case-fold-search t)
           candidates)
-      (while (re-search-forward "<a href=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</a>" nil t)
+      (while (re-search-forward
+              "<a href=\"\\([^\"]+?\\)\"[^>]*?>\\([^<]+?\\)</a>" nil t)
         (let* ((a (match-string 0))
                (href (match-string 1))
                (text (save-match-data
                        (xml-substitute-special (match-string 2))))
                (tags (and (string-match "tags=\"\\([^\"]+?\\)\"" a)
-                          (match-string 1 a))))
-          (push (propertize (concat text (and tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":")))
-                            'href href)
-                candidates)))
+                          (concat " :" (subst-char-in-string
+                                        ?, ?: (match-string 1 a) t)
+                                  ":")))
+               (cand (if tags (concat text tags) text)))
+          (put-text-property 0 (length cand) 'href href cand)
+          (push cand candidates)))
       candidates)))
 
 ;;;###autoload
