@@ -4521,7 +4521,7 @@ If there is no such buffer, start a new `shell' with NAME."
 ;;** `counsel-firefox-bookmarks'
 (defvar counsel-firefox-bookmarks-file
   (car (file-expand-wildcards "~/.mozilla/firefox/*/bookmarks.html"))
-  "Firefox's auto exported html bookmarks file.")
+  "Firefox's automatically exported HTML bookmarks file.")
 
 (defun counsel-firefox-bookmarks-action (x)
   "Browse candidate X."
