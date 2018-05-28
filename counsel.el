@@ -4518,7 +4518,7 @@ If there is no such buffer, start a new `shell' with NAME."
                             (reusable-frames . visible)))
     (shell name)))
 
-;;** `counsel-firefox-bookmarks`
+;;** `counsel-firefox-bookmarks'
 (defvar counsel-firefox-bookmarks-html-file
   (car (file-expand-wildcards "~/.mozilla/firefox/*/bookmarks.html"))
   "Firefox's auto exported html bookmarks file.")
