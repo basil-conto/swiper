@@ -4519,7 +4519,7 @@ If there is no such buffer, start a new `shell' with NAME."
     (shell name)))
 
 ;;** `counsel-firefox-bookmarks'
-(defvar counsel-firefox-bookmarks-html-file
+(defvar counsel-firefox-bookmarks-file
   (car (file-expand-wildcards "~/.mozilla/firefox/*/bookmarks.html"))
   "Firefox's auto exported html bookmarks file.")
 
@@ -4529,9 +4529,9 @@ If there is no such buffer, start a new `shell' with NAME."
 
 (defun counsel-firefox-bookmarks--candidates ()
   (let ((candidates))
-    (if (and counsel-firefox-bookmarks-html-file (file-exists-p counsel-firefox-bookmarks-html-file))
+    (if (and counsel-firefox-bookmarks-file (file-exists-p counsel-firefox-bookmarks-file))
       (with-temp-buffer
-        (insert-file-contents counsel-firefox-bookmarks-html-file)
+        (insert-file-contents counsel-firefox-bookmarks-file)
         (goto-char (point-min))
         (while (re-search-forward "*?<A HREF=\"\\([^\"]+\\)\"[^>]*>\\([^<]+\\)</A>" nil t)
           (let ((a (match-string 0))
@@ -4541,7 +4541,7 @@ If there is no such buffer, start a new `shell' with NAME."
             (if (string-match "TAGS=\"\\([^\"]+\\)\"" a)
                 (setq tags (match-string 1 a)))
             (push (propertize (format "%s%s" text (if tags (concat "    :" (replace-regexp-in-string "," ":" tags) ":") "")) 'href href) candidates))))
-      (warn "`counsel-firefox-bookmarks-html-file` not exists"))
+      (warn "`counsel-firefox-bookmarks-file` not exists"))
       candidates))
 
 ;;;###autoload
