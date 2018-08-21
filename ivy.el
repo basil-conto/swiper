@@ -1041,8 +1041,8 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
 (defun ivy-scroll-up-command ()
   "Scroll the candidates upward by the minibuffer height."
   (interactive)
-  (ivy-set-index (min (1- (+ ivy--index ivy-height))
-                      (1- ivy--length))))
+  (ivy-set-index (1- (min (+ ivy--index ivy-height)
+                          ivy--length))))
 
 (defun ivy-scroll-down-command ()
   "Scroll the candidates downward by the minibuffer height."
