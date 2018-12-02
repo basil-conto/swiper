@@ -2921,12 +2921,11 @@ If X is already part of the list, remove it instead.  Quit the selection if
 X is selected by either `ivy-done', `ivy-alt-done' or `ivy-immediate-done',
 otherwise continue prompting for tags."
   (if (member x counsel-org-tags)
-      (progn
-        (setq counsel-org-tags (delete x counsel-org-tags)))
+      (setq counsel-org-tags (delete x counsel-org-tags))
     (unless (equal x "")
-      (setq counsel-org-tags (append counsel-org-tags (list x)))
+      (setq counsel-org-tags (nconc counsel-org-tags (list x)))
       (unless (member x ivy--all-candidates)
-        (setq ivy--all-candidates (append ivy--all-candidates (list x))))))
+        (setq ivy--all-candidates (nconc ivy--all-candidates (list x))))))
   (let ((prompt (counsel-org-tag-prompt)))
     (setf (ivy-state-prompt ivy-last) prompt)
     (setq ivy--prompt (concat "%-4d " prompt)))
@@ -2950,7 +2949,7 @@ otherwise continue prompting for tags."
                               (append (org-get-tags) add-tags)))
                        (counsel-org--set-tags))))))
            (counsel-org--set-tags)))
-        ((eq this-command 'ivy-call)
+        ((eq this-command #'ivy-call)
          (with-selected-window (active-minibuffer-window)
            (delete-minibuffer-contents)))))
 
