@@ -2849,7 +2849,7 @@ INITIAL-INPUT can be given as the initial minibuffer input."
 ;;* Org
 ;;** `counsel-org-tag'
 (defvar counsel-org-tags nil
-  "Store the current list of tags.")
+  "List of current Org tags.")
 
 (defvar org-outline-regexp)
 (defvar org-indent-mode)
