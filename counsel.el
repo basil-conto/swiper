@@ -2929,29 +2929,30 @@ otherwise continue prompting for tags."
   (let ((prompt (counsel-org-tag-prompt)))
     (setf (ivy-state-prompt ivy-last) prompt)
     (setq ivy--prompt (concat "%-4d " prompt)))
-  (cond ((memq this-command '(ivy-done
-                              ivy-alt-done
-                              ivy-immediate-done))
-         (if (eq major-mode 'org-agenda-mode)
-             (if (null org-agenda-bulk-marked-entries)
-                 (let ((hdmarker (or (org-get-at-bol 'org-hd-marker)
-                                     (org-agenda-error))))
-                   (with-current-buffer (marker-buffer hdmarker)
-                     (goto-char hdmarker)
-                     (counsel-org--set-tags)))
-               (let ((add-tags (copy-sequence counsel-org-tags)))
-                 (dolist (m org-agenda-bulk-marked-entries)
-                   (with-current-buffer (marker-buffer m)
-                     (save-excursion
-                       (goto-char m)
-                       (setq counsel-org-tags
-                             (delete-dups
-                              (append (org-get-tags) add-tags)))
-                       (counsel-org--set-tags))))))
-           (counsel-org--set-tags)))
-        ((eq this-command #'ivy-call)
+  (cond ((eq this-command #'ivy-call)
          (with-selected-window (active-minibuffer-window)
-           (delete-minibuffer-contents)))))
+           (delete-minibuffer-contents)))
+        ((not (memq this-command '(ivy-done
+                                   ivy-alt-done
+                                   ivy-immediate-done))))
+        ((not (eq major-mode 'org-agenda-mode))
+         (counsel-org--set-tags))
+        (org-agenda-bulk-marked-entries
+         (let ((add-tags (copy-sequence counsel-org-tags)))
+           (dolist (m org-agenda-bulk-marked-entries)
+             (with-current-buffer (marker-buffer m)
+               (save-excursion
+                 (goto-char m)
+                 (setq counsel-org-tags
+                       (delete-dups
+                        (append (org-get-tags) add-tags)))
+                 (counsel-org--set-tags))))))
+        (t
+         (let ((hdmarker (or (org-get-at-bol 'org-hd-marker)
+                             (org-agenda-error))))
+           (with-current-buffer (marker-buffer hdmarker)
+             (goto-char hdmarker)
+             (counsel-org--set-tags))))))
 
 (defun counsel-org-tag-prompt ()
   "Return prompt for `counsel-org-tag'."
