@@ -2978,17 +2978,17 @@ otherwise continue prompting for tags."
   "Add or remove tags in `org-mode'."
   (interactive)
   (save-excursion
-    (if (eq major-mode 'org-agenda-mode)
-        (if org-agenda-bulk-marked-entries
-            (setq counsel-org-tags nil)
-          (let ((hdmarker (or (org-get-at-bol 'org-hd-marker)
-                              (org-agenda-error))))
-            (with-current-buffer (marker-buffer hdmarker)
-              (goto-char hdmarker)
-              (setq counsel-org-tags (org-get-tags)))))
-      (unless (org-at-heading-p)
-        (org-back-to-heading t))
-      (setq counsel-org-tags (org-get-tags)))
+    (setq counsel-org-tags
+          (cond ((not (eq major-mode 'org-agenda-mode))
+                 (unless (org-at-heading-p)
+                   (org-back-to-heading t))
+                 (org-get-tags))
+                ((null org-agenda-bulk-marked-entries)
+                 (let ((hdmarker (or (org-get-at-bol 'org-hd-marker)
+                                     (org-agenda-error))))
+                   (with-current-buffer (marker-buffer hdmarker)
+                     (goto-char hdmarker)
+                     (org-get-tags))))))
     (let ((org-last-tags-completion-table
            (append (and (or org-complete-tags-always-offer-all-agenda-tags
                             (eq major-mode 'org-agenda-mode))
