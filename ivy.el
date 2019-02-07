@@ -162,11 +162,27 @@
 ;; Set default customization `:group' to `ivy' for the rest of the file.
 (setcdr (assoc load-file-name custom-current-group-alist) 'ivy)
 
-(defcustom ivy-height 10
-  "Number of lines for the minibuffer window.
+(defvar ivy--alist-key-type '(choice (const :tag "Default" t)
+                                     (symbol :tag "Command"))
+  "Widget `:key-type' of alist user options keyed by commands.")
 
+(defcustom ivy-height 10
+  "Number of lines to display in the minibuffer window.
 See also `ivy-height-alist'."
   :type 'integer)
+
+(make-obsolete-variable 'ivy-height 'ivy-height-alist "0.11.0")
+
+(defcustom ivy-height-alist `((t . ,ivy-height))
+  "Alist mapping commands to individual values of `ivy-height'.
+Each element is of the form (COMMAND . HEIGHT).
+COMMAND is either a completion command symbol or t, which
+specifies the default for commands not present in the alist.
+HEIGHT is either the number or a function of no arguments
+returning the number of lines to display in the minibuffer."
+  :type `(alist
+          :key-type ,ivy--alist-key-type
+          :value-type (choice integer function)))
 
 (defcustom ivy-count-format "%-4d "
   "The style to use for displaying the current candidate count for `ivy-read'.
@@ -249,7 +265,9 @@ Examples of properties include associated `:cleanup' functions.")
 
 (defvar ivy-display-functions-alist
   '((ivy-completion-in-region . ivy-display-function-overlay))
-  "An alist for customizing `ivy-display-function'.")
+  "Alist mapping commands to their display function.
+Each cdr specifies the value of `ivy-display-function' to use for
+the corresponding collection.")
 
 (defvar ivy-completing-read-dynamic-collection nil
   "Run `ivy-completing-read' with `:dynamic-collection t`.")
@@ -265,24 +283,17 @@ Examples of properties include associated `:cleanup' functions.")
     (Info-index . ivy-completing-read-with-empty-string-def)
     (Info-virtual-index . ivy-completing-read-with-empty-string-def)
     (info-display-manual . ivy-completing-read-with-empty-string-def))
-  "An alist of handlers to replace `completing-read' in `ivy-mode'."
+  "Alist mapping commands to `completing-read' handlers.
+Each element of the form (COMMAND . HANDLER) specifies that
+HANDLER should be used in place of `completing-read-function'
+when COMMAND performs minibuffer completion under `ivy-mode'."
   :type '(alist :key-type function :value-type function))
 
-(defcustom ivy-height-alist nil
-  "An alist to customize `ivy-height'.
-
-It is a list of (CALLER . HEIGHT).  CALLER is a caller of
-`ivy-read' and HEIGHT is the number of lines displayed.
-HEIGHT can also be a function that returns the number of lines."
-  :type '(alist
-          :key-type function
-          :value-type (choice integer function)))
-
-(defvar ivy-completing-read-ignore-handlers-depth -1
-  "Used to avoid infinite recursion.
-
-If `(minibuffer-depth)' equals this, `ivy-completing-read' will
-act as if `ivy-completing-read-handlers-alist' is empty.")
+(defvar ivy--completing-read-depth 0
+  "Current recursion depth of `ivy-completing-read'.
+If this exceeds `minibuffer-depth', the value of
+`ivy-completing-read-handlers-alist' is ignored to avoid infinite
+recursion.")
 
 (defvar ivy-highlight-grep-commands nil
   "List of counsel grep-like commands.")
@@ -1691,7 +1702,7 @@ like.")
   '((ivy--regex-ignore-order . ivy--highlight-ignore-order)
     (ivy--regex-fuzzy . ivy--highlight-fuzzy)
     (ivy--regex-plus . ivy--highlight-default))
-  "An alist of highlighting functions for each regex buidler function.")
+  "Alist mapping regex builders to highlighting functions.")
 
 (defcustom ivy-initial-inputs-alist
   '((org-refile . "^")
@@ -1703,12 +1714,17 @@ like.")
     (counsel-org-capture . "^")
     (Man-completion-table . "^")
     (woman . "^"))
-  "An alist associating commands with their initial input.
+  "Alist mapping commands to their initial input.
+Its effect can be overridden by passing a non-nil INITIAL-INPUT
+argument to the corresponding `ivy-read' call.
 
-Each cdr is either a string or a function called in the context
-of a call to `ivy-read'."
-  :type '(alist :key-type (symbol)
-                :value-type (choice (string) (function))))
+Each car is either a completion command or t, which specifies the
+default for commands not present in the alist.
+Each cdr is either nil or a string, or a function which returns
+such a value, where nil stands for the empty string."
+  :type `(alist :key-type ,ivy--alist-key-type
+                :value-type (choice (const :tag "Empty" nil)
+                                    string function)))
 
 (defcustom ivy-hooks-alist nil
   "An alist associating commands to setup functions.
@@ -2164,11 +2180,11 @@ HISTORY is a list of previously selected inputs.
 DEF is the default value.
 INHERIT-INPUT-METHOD is currently ignored."
   (let ((handler
-         (and (< ivy-completing-read-ignore-handlers-depth (minibuffer-depth))
+         (and (<= ivy--completing-read-depth (minibuffer-depth))
               (assq this-command ivy-completing-read-handlers-alist))))
     (if handler
         (let ((completion-in-region-function #'completion--in-region)
-              (ivy-completing-read-ignore-handlers-depth (1+ (minibuffer-depth))))
+              (ivy--completing-read-depth (1+ (minibuffer-depth))))
           (funcall (cdr handler)
                    prompt collection
                    predicate require-match
@@ -3960,8 +3976,8 @@ Skip buffers that match `ivy-ignore-buffers'."
 (defun ivy-switch-view ()
   "Switch to one of the window views stored by `ivy-push-view'."
   (interactive)
-  (let ((ivy-initial-inputs-alist
-         '((ivy-switch-buffer . "{}"))))
+  (let ((ivy-initial-inputs-alist (cons '(ivy-switch-buffer . "{}")
+                                        ivy-initial-inputs-alist)))
     (ivy-switch-buffer)))
 
 ;;;###autoload
