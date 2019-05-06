@@ -21,21 +21,16 @@
 
 ;;; Commentary:
 
-;; This packages provides the tests for `ert'.  They can be executed
-;; from the command line as well by calling "make test".
+;; This packages provides ERT tests for Ivy.  They can be executed
+;; from the command line as well as by calling "make test".
 
 ;;; Code:
 
 (require 'ert)
-(require 'colir)
+(eval-when-compile (require 'cl-lib))
 
-;; Useful for #'ivy-read-remap.  It must arrive before (require 'ivy).
-(define-key global-map (kbd "<S-right>") #'end-of-buffer)
-
-(require 'ivy)
-(require 'counsel)
-
-(message "%s" (emacs-version))
+(when noninteractive
+  (message "%s" (emacs-version)))
 
 (defvar ivy-expr nil
   "Holds a test expression to evaluate with `ivy-eval'.")
@@ -48,23 +43,23 @@
   (interactive)
   (setq ivy-result (eval ivy-expr)))
 
-(global-set-key (kbd "C-c e") 'ivy-eval)
-
 (cl-defun ivy-with (expr keys &key dir)
-  "Evaluate EXPR followed by KEYS."
-  (let ((ivy-expr expr)
-        (inhibit-message t)
-        (buf (current-buffer)))
-    (save-window-excursion
-      (unwind-protect
-           (progn
-             ;; `execute-kbd-macro' doesn't pick up `default-directory'
-             (when dir
-               (dired (expand-file-name dir (counsel-locate-git-root))))
-             (execute-kbd-macro
-              (vconcat (kbd "C-c e")
-                       (kbd keys))))
-        (switch-to-buffer buf)))
+  "Evaluate EXPR followed by KEYS.
+When non-nil, DIR overrides `default-directory'."
+  (let* ((ivy-expr expr)
+         (inhibit-message t)
+         (keydef (lookup-key (current-global-map) [ivy-eval]))
+         (dir (and dir (expand-file-name dir (counsel-locate-git-root))))
+         (default-directory (or dir default-directory))
+         (completing-read-function #'ivy-completing-read)
+         (completion-in-region-function #'ivy-completion-in-region))
+    (unwind-protect
+        (save-current-buffer
+          ;; Can't use `unread-command-events' when `noninteractive',
+          ;; so invoke `ivy-eval' as a command.
+          (global-set-key [ivy-eval] #'ivy-eval)
+          (execute-kbd-macro (vconcat [ivy-eval] (kbd keys))))
+      (global-set-key [ivy-eval] keydef))
     ivy-result))
 
 (defun command-execute-setting-this-command (cmd &rest args)
@@ -135,15 +130,15 @@ will bring the behavior in line with the newer Emacsen."
   (should (equal
            (ivy-with
             '(with-output-to-string
-              (ivy-read "test" '(("foo" . "bar"))
-               :action (lambda (x) (prin1 x))))
+               (ivy-read "test" '(("foo" . "bar"))
+                         :action #'prin1))
             "f C-m")
            "(\"foo\" . \"bar\")"))
   (should (equal
            (ivy-with
             '(with-output-to-string
-              (ivy-read "test" '(("foo" . "bar"))
-               :action (lambda (x) (prin1 x))))
+               (ivy-read "test" '(("foo" . "bar"))
+                         :action #'prin1))
             "asdf C-m")
            "\"asdf\""))
   (should (equal
@@ -171,7 +166,7 @@ will bring the behavior in line with the newer Emacsen."
 (ert-deftest ivy-read-remap ()
   (should (equal
            (ivy-with '(ivy-read "pattern: " '("blue" "yellow" "red"))
-                     "<S-right> C-m")
+                     "M-> C-m")
            "red")))
 
 (ert-deftest swiper--re-builder ()
@@ -330,11 +325,11 @@ will bring the behavior in line with the newer Emacsen."
                      90 96 (face ivy-current-match read-only nil)))))
 
 (ert-deftest ivy--filter ()
-  (setq ivy-last (make-ivy-state))
-  (should (equal (ivy--filter "the" '("foo" "the" "The"))
-                 '("the" "The")))
-  (should (equal (ivy--filter "The" '("foo" "the" "The"))
-                 '("The"))))
+  (let ((ivy-last (make-ivy-state)))
+    (should (equal (ivy--filter "the" '("foo" "the" "The"))
+                   '("the" "The")))
+    (should (equal (ivy--filter "The" '("foo" "the" "The"))
+                   '("The")))))
 
 (ert-deftest counsel--elisp-to-pcre ()
   (should (equal (counsel--elisp-to-pcre
@@ -416,201 +411,46 @@ will bring the behavior in line with the newer Emacsen."
              str)
            #("Desktop" 0 7 (face (ivy-current-match (foreground-color . "#8ac6f2") bold))))))
 
+(defun ivy-test--current-prefix-arg ()
+  "Return `ivy-current-prefix-arg' value from `ivy-read' action."
+  (let* (arg
+         (action (lambda (_) (setq arg ivy-current-prefix-arg))))
+    (ivy-read "" () :action `(1 ("o" ,action)
+                                ("p" ,action)))
+    arg))
 
-;;* prefix arg tests
-;;** tests with no prefix
 (ert-deftest ivy-no-prefix-arg ()
   "Tests with no prefix arg."
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-m")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-j")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-M-j")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-M-m")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-M-n")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-M-p")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "M-o o")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "TAB TAB")
-           nil)))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "C-m"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "C-j"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "C-M-j"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "C-M-m"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "C-M-n"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "C-M-p"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "M-o o"))
+  (should-not (ivy-with '(ivy-test--current-prefix-arg) "TAB TAB")))
 
-;;** tests with one prefix
-(ert-deftest ivy-one-prefix-arg ()
-  "Tests with no prefix arg."
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u C-m")
-           '(4)))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u C-j")
-           '(4)))
-  ;; C-M-j does not pass a prefix on.
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u C-M-j")
-           nil))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u C-M-m")
-           '(4)))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u C-M-n")
-           '(4)))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u C-M-p")
-           '(4)))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u M-o o")
-           '(4)))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action
-               '(1 ("o" (lambda (x)
-                          (setq res ivy-current-prefix-arg)))
-                 ("p" (lambda (x)
-                        (setq res ivy-current-prefix-arg)))))
-              res)
-            "C-u M-o p")
-           '(4)))
-  ;; TAB TAB does not pass prefix arg
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "TAB TAB")
-           nil)))
-
-
-(ert-deftest ivy-numeric-prefix-arg ()
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "M-1 M-2 M-3 C-m")
-           123))
-  (should (equal
-           (ivy-with
-            '(let (res)
-              (ivy-read "pattern: " '("blue" "yellow")
-               :action (lambda (x)
-                         (setq res ivy-current-prefix-arg)))
-              res)
-            "C-u 123 C-m")
-           123)))
+(ert-deftest ivy-prefix-arg ()
+  "Tests with a prefix arg."
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u C-m") '(4)))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u C-j") '(4)))
+  ;; C-M-j does not pass on a prefix arg.
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u C-M-j") nil))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u C-M-m") '(4)))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u C-M-n") '(4)))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u C-M-p") '(4)))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u M-o o") '(4)))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u M-o p") '(4)))
+  ;; TAB TAB does not pass on a prefix arg.
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "TAB TAB") nil))
+  (should (equal (ivy-with '(ivy-test--current-prefix-arg) "C-u 123 C-m") 123)))
 
 (ert-deftest ivy-re-match ()
   (should (ivy-re-match '(("counsel" . t)) "(defun counsel"))
   (should (ivy-re-match '(("defun" . t) ("counsel" . t)) "(defun counsel"))
   (should (ivy-re-match '(("counsel" . t) ("defun" . t)) "(defun counsel"))
-  (should (not (ivy-re-match '(("counsel" . nil) ("defun" . t)) "(defun counsel")))
-  (should (not (ivy-re-match '(("defun" . t) ("counsel" . nil)) "(defun counsel"))))
+  (should-not (ivy-re-match '(("counsel" . nil) ("defun" . t)) "(defun counsel"))
+  (should-not (ivy-re-match '(("defun" . t) ("counsel" . nil)) "(defun counsel")))
 
 (ert-deftest ivy-read-preselect ()
   (should (equal
@@ -704,31 +544,29 @@ will bring the behavior in line with the newer Emacsen."
             "bl C-p C-M-j")
            "bl")))
 
-(defmacro ivy-with-r (expr &rest keys)
-  `(with-output-to-string
-     (save-window-excursion
-       (switch-to-buffer standard-output t)
-       ,expr
-       (ivy-mode)
-       (let ((inhibit-message t))
-         (execute-kbd-macro
-          ,(apply #'vconcat (mapcar #'kbd keys)))))))
+(defun ivy-with-temp-buffer (expr keys)
+  (save-window-excursion
+    (with-temp-buffer
+      (set-window-buffer nil (current-buffer))
+      (ivy-with expr keys)
+      (cons (buffer-substring (point-min) (point))
+            (buffer-substring (point) (point-max))))))
 
 (ert-deftest ivy-completion-in-region ()
-  (should (string=
-           (ivy-with-r
-            (progn
-              (emacs-lisp-mode)
-              (insert " emacs-lisp-mode-h"))
+  (should (equal
+           (ivy-with-temp-buffer
+            '(progn
+               (emacs-lisp-mode)
+               (insert " emacs-lisp-mode-h"))
             "C-M-i")
-           " emacs-lisp-mode-hook"))
-  (should (string=
-           (ivy-with-r
-            (progn
-              (emacs-lisp-mode)
-              (insert "(nconc"))
+           '(" emacs-lisp-mode-hook" . "")))
+  (should (equal
+           (ivy-with-temp-buffer
+            '(progn
+               (emacs-lisp-mode)
+               (insert "(nconc"))
             "C-M-i")
-           "(nconc")))
+           '("(nconc" . ""))))
 
 (ert-deftest ivy-completing-read-def-handling ()
   ;; DEF in COLLECTION
@@ -788,8 +626,7 @@ will bring the behavior in line with the newer Emacsen."
                     "c RET"))))
 
 (ert-deftest ivy-completing-read-handlers ()
-  (cl-letf* ((ivy-mode-reset-arg (if ivy-mode 1 0))
-             ;; Let-bind this so changes are reset after test
+  (cl-letf* (;; Let-bind this so changes are reset after test
              (ivy-completing-read-handlers-alist
               '((test-command-default-handler . completing-read-default)
                 (test-command-recursive-handler . ivy-completing-read-with-empty-string-def)))
@@ -805,55 +642,49 @@ will bring the behavior in line with the newer Emacsen."
               (symbol-function 'test-command-no-handler))
              ((symbol-function 'test-command-recursive-handler)
               (symbol-function 'test-command-no-handler)))
-    (unwind-protect
-         (progn
-           ;; Activate ivy-mode
-           (ivy-mode 1)
-           ;; No handler
-           (should
-            (equal "a"
-                   (ivy-with
-                    '(command-execute-setting-this-command
-                      'test-command-no-handler)
-                    "RET")))
-           (should
-            (equal "c"
-                   (ivy-with
-                    '(command-execute-setting-this-command
-                      'test-command-no-handler)
-                    "c RET")))
-           ;; Handler = `completing-read-default'; make sure ivy-read
-           ;; is never called
-           (cl-letf (((symbol-function 'ivy-read)
-                      (lambda (&rest args) (error "`ivy-read' should not be called"))))
-
-             (should
-              (equal ""
-                     (ivy-with
-                      '(command-execute-setting-this-command
-                        'test-command-default-handler)
-                      "RET")))
-             (should
-              (equal "c"
-                     (ivy-with
-                      '(command-execute-setting-this-command
-                        'test-command-default-handler)
-                      "c RET"))))
-           ;; Handler = `ivy-completing-read-with-empty-string-def';
-           ;; make sure infinite recursion does not occur
-           (should
-            (equal ""
-                   (ivy-with
-                    '(command-execute-setting-this-command
-                      'test-command-recursive-handler)
-                    "RET")))
-           (should
-            (equal "c"
-                   (ivy-with
-                    '(command-execute-setting-this-command
-                      'test-command-recursive-handler)
-                    "c RET"))))
-      (ivy-mode ivy-mode-reset-arg))))
+    ;; No handler
+    (should
+     (equal "a"
+            (ivy-with
+             '(command-execute-setting-this-command
+               'test-command-no-handler)
+             "RET")))
+    (should
+     (equal "c"
+            (ivy-with
+             '(command-execute-setting-this-command
+               'test-command-no-handler)
+             "c RET")))
+    ;; Handler = `completing-read-default'; make sure ivy-read
+    ;; is never called
+    (cl-letf (((symbol-function 'ivy-read)
+               (lambda (&rest args) (error "`ivy-read' should not be called"))))
+      (should
+       (equal ""
+              (ivy-with
+               '(command-execute-setting-this-command
+                 'test-command-default-handler)
+               "RET")))
+      (should
+       (equal "c"
+              (ivy-with
+               '(command-execute-setting-this-command
+                 'test-command-default-handler)
+               "c RET"))))
+    ;; Handler = `ivy-completing-read-with-empty-string-def';
+    ;; make sure infinite recursion does not occur
+    (should
+     (equal ""
+            (ivy-with
+             '(command-execute-setting-this-command
+               'test-command-recursive-handler)
+             "RET")))
+    (should
+     (equal "c"
+            (ivy-with
+             '(command-execute-setting-this-command
+               'test-command-recursive-handler)
+             "c RET")))))
 
 (ert-deftest ivy-completion-common-length ()
   (should (= 2
@@ -931,43 +762,27 @@ will bring the behavior in line with the newer Emacsen."
   (define-key ivy-minibuffer-map (kbd "TAB") 'ivy-partial-or-done)
   (delete-directory "/tmp/ivy-partial-test" t))
 
-(defun ivy-with-temp-buffer (expr keys)
-  (let ((temp-buffer (generate-new-buffer " *temp*")))
-    (save-window-excursion
-      (unwind-protect
-           (progn
-             (switch-to-buffer temp-buffer)
-             (ivy-with expr keys)
-             (list (point)
-                   (buffer-string)))
-        (and (buffer-name temp-buffer)
-             (kill-buffer temp-buffer))))))
-
 (ert-deftest counsel-yank-pop ()
   (let ((kill-ring '("foo")))
     (should (equal
              (ivy-with-temp-buffer '(counsel-yank-pop) "C-m")
-             '(4 "foo")))
+             '("foo" . "")))
     (let ((counsel-yank-pop-after-point t))
       (should (equal
                (ivy-with-temp-buffer '(counsel-yank-pop) "C-m")
-               '(1 "foo"))))))
+               '("" . "foo"))))))
 
 (ert-deftest ivy-read-file-name-in-buffer-visiting-file ()
-  "Test `ivy-immediate-done' command in `read-file-name' without any editing in
-a buffer visiting a file."
-  (let ((ivy-mode-reset-arg (if ivy-mode 1 0)))
-    (ivy-mode 1)
-    (should
-     (equal "~/dummy-dir/dummy-file" ;visiting file name, abbreviated form
-            (ivy-with
-             '(let ((insert-default-directory t))
-                (with-temp-buffer
-                  (set-visited-file-name "~/dummy-dir/dummy-file")
-                  (read-file-name "Load file: " nil nil 'lambda))) ;load-file
-             ;; No editing, just command ivy-immediate-done
-             "C-M-j")))
-    (ivy-mode ivy-mode-reset-arg)))
+  "Test `ivy-immediate-done' during `read-file-name' in file-visiting buffer."
+  (should
+   (equal "~/dummy-dir/dummy-file" ; Visiting file name, abbreviated form
+          (ivy-with
+           '(let ((insert-default-directory t))
+              (with-temp-buffer
+                (set-visited-file-name "~/dummy-dir/dummy-file")
+                (read-file-name "Load file: " nil nil 'lambda))) ; load-file
+           ;; No editing, just command `ivy-immediate-done'
+           "C-M-j"))))
 
 (ert-deftest ivy-starts-with-dotslash ()
   (should (ivy--starts-with-dotslash "./test1"))
@@ -1081,17 +896,16 @@ a buffer visiting a file."
     "(defun foo)\nasdf\n(defvar| bar)")))
 
 (ert-deftest ivy-use-selectable-prompt ()
-  (let ((ivy-use-selectable-prompt t)
-        (completing-read-function #'ivy-completing-read))
-    (should (string= (ivy-with '(ivy-read "prompt: " '("foo" "bar")
-                                 :require-match t)
+  (let ((ivy-use-selectable-prompt t))
+    (should (string= (ivy-with '(ivy-read "Prompt: " '("foo" "bar")
+                                          :require-match t)
                                "C-p C-m")
                      "foo"))
-    (should (string= (ivy-with '(ivy-read "prompt: " '("" "foo" "bar")
-                                 :require-match t)
+    (should (string= (ivy-with '(ivy-read "Prompt: " '("" "foo" "bar")
+                                          :require-match t)
                                "C-p C-m")
                      ""))
-    (should (string= (ivy-with '(completing-read "Position: " '(("") ("t") ("b")) nil t)
+    (should (string= (ivy-with '(completing-read "Prompt: " '(("") ("t") ("b")) nil t)
                                "C-p C-m")
                      ""))))
 
