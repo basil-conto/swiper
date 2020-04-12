@@ -240,7 +240,7 @@ bookmarks.  Any other non-nil value includes both."
           (const :tag "All virtual buffers" t)))
 
 (defvar ivy--display-function nil
-  "The display-function is used in current.")
+  "The display-function in current use.")
 
 (defvar ivy-display-functions-props
   '((ivy-display-function-overlay :cleanup ivy-overlay-cleanup))
