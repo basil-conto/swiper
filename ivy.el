@@ -38,9 +38,11 @@
 
 ;;; Code:
 
-(require 'cl-lib)
-(require 'ivy-overlay)
 (require 'colir)
+(require 'ivy-overlay)
+
+(require 'cl-lib)
+(require 'delsel)
 (require 'ring)
 
 ;;* Customization
@@ -408,7 +410,6 @@ This is a global variable that is set by ivy functions for use in
 action functions.")
 
 ;;* Keymap
-(require 'delsel)
 (defvar ivy-minibuffer-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-m") 'ivy-done)
