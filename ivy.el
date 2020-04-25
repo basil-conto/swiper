@@ -507,21 +507,17 @@ action functions.")
   extra-props)
 
 (defvar ivy-last (make-ivy-state)
-  "The last parameters passed to `ivy-read'.
+  "The last parameters passed to `ivy-read'.")
 
-This should eventually become a stack so that you could use
-`ivy-read' recursively.")
+(defvar ivy-state ivy-last
+  "")
 
-(defvar ivy-recursive-last nil)
-
-(defvar ivy-recursive-restore t
-  "When non-nil, restore the above state when exiting the minibuffer.
-This variable is let-bound to nil by functions that take care of
-the restoring themselves.")
+(defvar ivy--state-stack ()
+  "")
 
 (defsubst ivy-set-action (action)
-  "Set the current `ivy-last' field to ACTION."
-  (setf (ivy-state-action ivy-last) action))
+  "Set ACTION as the current :action of `ivy-state'."
+  (setf (ivy-state-action ivy-state) action))
 
 (defvar inhibit-message)
 
@@ -537,7 +533,7 @@ the restoring themselves.")
              (eol (save-excursion (goto-char beg) (line-end-position))))
         (buffer-substring-no-properties beg (min end eol))))
      ((thing-at-point 'url))
-     ((and (eq (ivy-state-collection ivy-last) #'read-file-name-internal)
+     ((and (eq (ivy-state-collection ivy-state) #'read-file-name-internal)
            (let ((inhibit-message t)
                  (ffap-machine-p-known 'reject))
              (run-hook-with-args-until-success 'file-name-at-point-functions))))
@@ -654,7 +650,8 @@ preselected candidate.")
 (defun ivy--set-index-dynamic-collection ()
   (when ivy--trying-to-resume-dynamic-collection
     (let ((preselect-index
-           (ivy--preselect-index (ivy-state-preselect ivy-last) ivy--all-candidates)))
+           (ivy--preselect-index (ivy-state-preselect ivy-state)
+                                 ivy--all-candidates)))
       (when preselect-index
         (ivy-set-index preselect-index)))
     (setq ivy--trying-to-resume-dynamic-collection nil)))
@@ -727,10 +724,10 @@ N is obtained from `ivy-more-chars-alist'."
 
 (defun ivy-exit-with-action (action &optional exit-code)
   "Quit the minibuffer and call ACTION afterwards."
-  (ivy-set-action
-   `(lambda (x)
-      (funcall ',action x)
-      (ivy-set-action ',(ivy-state-action ivy-last))))
+  (let ((old-action (ivy-state-action ivy-state)))
+    (ivy-set-action (lambda (x)
+                      (funcall action x)
+                      (ivy-set-action old-action))))
   (setq ivy-exit (or exit-code 'done))
   (exit-minibuffer))
 
@@ -738,22 +735,22 @@ N is obtained from `ivy-more-chars-alist'."
   "Execute BODY in the window from which `ivy-read' was called."
   (declare (indent 0)
            (debug t))
-  `(with-selected-window (ivy--get-window ivy-last)
+  `(with-selected-window (ivy--get-window ivy-state)
      ,@body))
 
 (defun ivy--done (text)
   "Insert TEXT and exit minibuffer."
-  (if (member (ivy-state-prompt ivy-last) '("Create directory: " "Make directory: "))
-      (ivy-immediate-done)
-    (if (stringp text)
-        (insert
-         (setf (ivy-state-current ivy-last)
-               (if (and ivy--directory
-                        (not (eq (ivy-state-history ivy-last) 'grep-files-history)))
-                   (expand-file-name text ivy--directory)
-                 text))))
-    (setq ivy-exit 'done)
-    (exit-minibuffer)))
+  (cond ((member (ivy-state-prompt ivy-state)
+                 '("Create directory: " "Make directory: "))
+         (ivy-immediate-done))
+        ((stringp text)
+         (unless (or (not ivy--directory)
+                     (eq (ivy-state-history ivy-state) 'grep-files-history))
+           (setq text (expand-file-name text ivy--directory)))
+         (insert (setf (ivy-state-current ivy-state) text)))
+        (t
+         (setq ivy-exit 'done)
+         (exit-minibuffer))))
 
 (defcustom ivy-use-selectable-prompt nil
   "When non-nil, make the prompt line selectable like a candidate.
@@ -776,14 +773,12 @@ candidate, not the prompt."
 (defun ivy--prompt-selectable-p ()
   "Return t if the prompt line is selectable."
   (and ivy-use-selectable-prompt
-       (or (memq (ivy-state-require-match ivy-last)
+       (or (memq (ivy-state-require-match ivy-state)
                  '(nil confirm confirm-after-completion))
            ;; :require-match is t, but "" is in the collection
-           (let ((coll (ivy-state-collection ivy-last)))
-             (and (listp coll)
-                  (if (consp (car coll))
-                      (member '("") coll)
-                    (member "" coll)))))))
+           (let ((coll (ivy-state-collection ivy-state)))
+             (and (consp coll)
+                  (assoc-string "" coll))))))
 
 (defun ivy--prompt-selected-p ()
   "Return t if the prompt line is selected."
@@ -805,15 +800,15 @@ candidate, not the prompt."
                ;; the action from `ivy-dispatching-done' may not need a
                ;; candidate at all
                (eq this-command 'ivy-dispatching-done))
-           (ivy--done (ivy-state-current ivy-last)))
-          ((and (memq (ivy-state-collection ivy-last)
+           (ivy--done (ivy-state-current ivy-state)))
+          ((and (memq (ivy-state-collection ivy-state)
                       '(read-file-name-internal internal-complete-buffer))
                 (eq confirm-nonexistent-file-or-buffer t)
                 (not (string= " (confirm)" ivy--prompt-extra)))
            (setq ivy--prompt-extra " (confirm)")
            (insert ivy-text)
            (ivy--exhibit))
-          ((memq (ivy-state-require-match ivy-last)
+          ((memq (ivy-state-require-match ivy-state)
                  '(nil confirm confirm-after-completion))
            (ivy--done ivy-text))
           (t
@@ -867,28 +862,25 @@ candidate, not the prompt."
 
 (defun ivy-read-action-format-default (actions)
   "Create a docstring from ACTIONS.
-
-ACTIONS is a list.  Each list item is a list of 3 items:
-key (a string), cmd and doc (a string)."
+ACTIONS is a list of (KEY CMD DOC), where KEY and DOC are
+strings."
   (format "%s\n%s\n"
-          (if (eq this-command 'ivy-read-action)
+          (if (eq this-command #'ivy-read-action)
               "Select action: "
-            (ivy-state-current ivy-last))
-          (mapconcat
-           (lambda (x)
-             (format "%s: %s"
-                     (propertize
-                      (car x)
-                      'face 'ivy-action)
-                     (nth 2 x)))
-           actions
-           "\n")))
+            (ivy-state-current ivy-state))
+          (mapconcat (lambda (x)
+                       (format "%s: %s"
+                               (propertize (car x) 'face 'ivy-action)
+                               (nth 2 x)))
+                     actions
+                     "\n")))
 
 (defun ivy-read-action-format-columns (actions)
-  "Create a docstring from ACTIONS, using several columns if needed to preserve `ivy-height'.
+  "Create a docstring from ACTIONS, possibly formatted in columns.
+Use multiple columns as needed to preserve `ivy-height'.
 
-ACTIONS is a list.  Each list item is a list of 3 items: key (a
-string), cmd and doc (a string)."
+ACTIONS is a list of (KEY CMD DOC), where KEY and DOC are
+strings."
   (let ((length (length actions))
         (i 0)
         (max-rows (- ivy-height 1))
@@ -915,7 +907,7 @@ string), cmd and doc (a string)."
     (format "%s\n%s\n"
             (if (eq this-command 'ivy-read-action)
                 "Select action: "
-              (ivy-state-current ivy-last))
+              (ivy-state-current ivy-state))
             (mapconcat 'identity
                        (apply 'cl-mapcar
                               (lambda (&rest args)
@@ -1270,32 +1262,32 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
 (defun ivy-resume ()
   "Resume the last completion session."
   (interactive)
-  (if (null (ivy-state-action ivy-last))
-      (user-error "The last session isn't compatible with `ivy-resume'")
-    (when (memq (ivy-state-caller ivy-last)
-                '(swiper swiper-isearch swiper-backward swiper-isearch-backward))
-      (switch-to-buffer (ivy-state-buffer ivy-last)))
-    (with-current-buffer (ivy-state-buffer ivy-last)
-      (let ((default-directory (ivy-state-directory ivy-last))
-            (ivy-use-ignore-default (ivy-state-ignore ivy-last)))
-        (ivy-read
-         (ivy-state-prompt ivy-last)
-         (ivy-state-collection ivy-last)
-         :predicate (ivy-state-predicate ivy-last)
-         :require-match (ivy-state-require-match ivy-last)
-         :initial-input ivy-text
-         :history (ivy-state-history ivy-last)
-         :preselect (ivy-state-current ivy-last)
-         :keymap (ivy-state-keymap ivy-last)
-         :update-fn (ivy-state-update-fn ivy-last)
-         :sort (ivy-state-sort ivy-last)
-         :action (ivy-state-action ivy-last)
-         :unwind (ivy-state-unwind ivy-last)
-         :re-builder (ivy-state-re-builder ivy-last)
-         :matcher (ivy-state-matcher ivy-last)
-         :dynamic-collection (ivy-state-dynamic-collection ivy-last)
-         :extra-props (ivy-state-extra-props ivy-last)
-         :caller (ivy-state-caller ivy-last))))))
+  (unless (ivy-state-action ivy-last)
+    (user-error "The last session isn't compatible with `ivy-resume'"))
+  (when (memq (ivy-state-caller ivy-last)
+              '(swiper swiper-isearch swiper-backward swiper-isearch-backward))
+    (switch-to-buffer (ivy-state-buffer ivy-last)))
+  (with-current-buffer (ivy-state-buffer ivy-last)
+    (let ((default-directory (ivy-state-directory ivy-last))
+          (ivy-use-ignore-default (ivy-state-ignore ivy-last)))
+      (ivy-read
+       (ivy-state-prompt ivy-last)
+       (ivy-state-collection ivy-last)
+       :predicate (ivy-state-predicate ivy-last)
+       :require-match (ivy-state-require-match ivy-last)
+       :initial-input ivy-text
+       :history (ivy-state-history ivy-last)
+       :preselect (ivy-state-current ivy-last)
+       :keymap (ivy-state-keymap ivy-last)
+       :update-fn (ivy-state-update-fn ivy-last)
+       :sort (ivy-state-sort ivy-last)
+       :action (ivy-state-action ivy-last)
+       :unwind (ivy-state-unwind ivy-last)
+       :re-builder (ivy-state-re-builder ivy-last)
+       :matcher (ivy-state-matcher ivy-last)
+       :dynamic-collection (ivy-state-dynamic-collection ivy-last)
+       :extra-props (ivy-state-extra-props ivy-last)
+       :caller (ivy-state-caller ivy-last)))))
 
 (defvar-local ivy-calling nil
   "When non-nil, call the current action when `ivy--index' changes.")
@@ -1479,14 +1471,6 @@ Example use:
      ;; do whatever with str - the corresponding buffer will not be opened
      )")
 
-(defun ivy-recursive-restore ()
-  "Restore the above state when exiting the minibuffer.
-See variable `ivy-recursive-restore' for further information."
-  (when (and ivy-recursive-last
-             ivy-recursive-restore
-             (not (eq ivy-last ivy-recursive-last)))
-    (ivy--reset-state (setq ivy-last ivy-recursive-last))))
-
 (defvar ivy-mark-prefix ">"
   "Prefix used by `ivy-mark'.")
 
@@ -1530,29 +1514,25 @@ See variable `ivy-recursive-restore' for further information."
             ((null action)
              current)
             ((eq action #'identity)
-             (prog1 x
-               (ivy-recursive-restore)))
+             x)
             (t
              (select-window (ivy--get-window ivy-last))
              (set-buffer (ivy-state-buffer ivy-last))
-             (prog1 (unwind-protect
-                         (if ivy-marked-candidates
-                             (let* ((prefix-len (length ivy-mark-prefix))
-                                    (marked-candidates
-                                     (mapcar
-                                      (lambda (s)
-                                        (let ((cand (substring s prefix-len)))
-                                          (if ivy--directory
-                                              (expand-file-name cand ivy--directory)
-                                            cand)))
-                                      ivy-marked-candidates))
-                                    (multi-action (ivy--get-multi-action ivy-last)))
-                               (if multi-action
-                                   (funcall multi-action marked-candidates)
-                                 (dolist (c marked-candidates)
-                                   (funcall action c))))
-                           (funcall action x))
-                      (ivy-recursive-restore))
+             (prog1 (if ivy-marked-candidates
+                        (let* ((prefix-len (length ivy-mark-prefix))
+                               (marked-candidates
+                                (mapcar
+                                 (lambda (s)
+                                   (let ((cand (substring s prefix-len)))
+                                     (if ivy--directory
+                                         (expand-file-name cand ivy--directory)
+                                       cand)))
+                                 ivy-marked-candidates))
+                               (multi-action (ivy--get-multi-action ivy-last)))
+                          (if multi-action
+                              (funcall multi-action marked-candidates)
+                            (mapc action marked-candidates)))
+                      (funcall action x))
                (unless (or (eq ivy-exit 'done)
                            (minibuffer-window-active-p (selected-window))
                            (null (active-minibuffer-window)))
@@ -1644,11 +1624,9 @@ If so, move to that directory, while keeping only the file name."
         (let ((file (file-name-nondirectory input))
               (dir (expand-file-name (file-name-directory input))))
           (if (string= dir ivy--directory)
-              (progn
-                (delete-minibuffer-contents)
-                (insert file))
-            (ivy--cd dir)
-            (insert file)))))))
+              (delete-minibuffer-contents)
+            (ivy--cd dir))
+          (insert file))))))
 
 (defun ivy--maybe-scroll-history ()
   "If the selected history element has an index, scroll there."
@@ -2130,6 +2108,15 @@ found, it falls back to the key t."
          ;; misearch.el
          (replace-regexp-in-string "RET to end" "C-M-j to end" prompt))))
 
+(defun ivy--auto-update-fn ()
+  "Invoke the action on the current candidate as an :update-fn."
+  (with-ivy-window
+    (funcall (ivy--get-action ivy-last)
+             (if (consp (car-safe (ivy-state-collection ivy-last)))
+                 (assoc (ivy-state-current ivy-last)
+                        (ivy-state-collection ivy-last))
+               (ivy-state-current ivy-last)))))
+
 ;;** Entry Point
 ;;;###autoload
 (cl-defun ivy-read (prompt collection
@@ -2212,11 +2199,9 @@ customizations apply to the current completion session."
   (when (equal overriding-local-map '(keymap))
     (keyboard-quit))
   (setq caller (or caller this-command))
-  (let* ((ivy-recursive-last (and (active-minibuffer-window) ivy-last))
-         (ivy--display-function
-          (when (or ivy-recursive-last
-                    (not (window-minibuffer-p)))
-            (ivy-alist-setting ivy-display-functions-alist caller))))
+  (push ivy-last ivy--state-stack)
+  (let ((ivy--display-function
+         (ivy-alist-setting ivy-display-functions-alist caller)))
     (setq update-fn (or update-fn (ivy-alist-setting ivy-update-fns-alist caller)))
     (setq unwind (or unwind (ivy-alist-setting ivy-unwind-fns-alist caller)))
     (setq ivy-last
@@ -2230,14 +2215,7 @@ customizations apply to the current completion session."
            :preselect preselect
            :keymap keymap
            :update-fn (if (eq update-fn 'auto)
-                          (lambda ()
-                            (with-ivy-window
-                              (funcall
-                               (ivy--get-action ivy-last)
-                               (if (consp (car-safe (ivy-state-collection ivy-last)))
-                                   (assoc (ivy-state-current ivy-last)
-                                          (ivy-state-collection ivy-last))
-                                 (ivy-state-current ivy-last)))))
+                          #'ivy--auto-update-fn
                         update-fn)
            :sort sort
            :action (ivy--compute-extra-actions action caller)
