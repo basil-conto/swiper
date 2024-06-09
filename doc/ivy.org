@@ -844,22 +844,8 @@ installed.
 :END:
 An action is a function that is called after you select a candidate
 during completion. This function takes a single string argument, which
-is the selected candidate.
-
-- Window context when calling an action ::
-     Currently, the action is executed in the minibuffer window
-     context. This means e.g. that if you call =insert= the text will
-     be inserted into the minibuffer.
-
-     If you want to execute the action in the initial window from
-     which the completion started, use the =with-ivy-window= wrapper
-     macro.
-
-     #+begin_src elisp
-     (defun ivy-insert-action (x)
-       (with-ivy-window
-         (insert x)))
-     #+end_src
+is the selected candidate. The action is executed in the context of
+the initial window from which the completion started.
 
 *** How can different actions be called?
 :PROPERTIES:
@@ -894,20 +880,19 @@ the window from which =ivy-read= was called.
 The second action copies the current candidate to the kill ring.
 
 #+begin_src elisp
-(defun ivy-yank-action (x)
-  (kill-new x))
-
 (defun ivy-copy-to-buffer-action (x)
-  (with-ivy-window
-    (insert x)))
+  (insert x))
+
+(defun ivy-copy-action (x)
+  (kill-new x))
 
 (ivy-set-actions
  t
  '(("i" ivy-copy-to-buffer-action "insert")
-   ("y" ivy-yank-action "yank")))
+   ("c" ivy-copy-action "copy")))
 #+end_src
 
-Then in any completion session, ~M-o y~ invokes =ivy-yank-action=, and
+Then in any completion session, ~M-o c~ invokes =ivy-copy-action=, and
 ~M-o i~ invokes =ivy-copy-to-buffer-action=.
 
 **** How to undo adding the two actions
@@ -1323,9 +1308,8 @@ INITIAL-INPUT can be given as the initial minibuffer input."
             :dynamic-collection t
             :history 'counsel-locate-history
             :action (lambda (file)
-                      (with-ivy-window
-                        (when file
-                          (find-file file))))
+                      (when file
+                        (find-file file)))
             :unwind #'counsel-delete-process
             :caller 'counsel-locate))
 #+end_src
@@ -1348,9 +1332,6 @@ that they appear:
 - =counsel-locate= is an interactive function with an optional =initial-input=.
 - =#'counsel-locate-function= is passed as the =collection= argument.
 - =dynamic-collection= is set to t, since this is an async collection.
-- =action= argument uses =with-ivy-window= wrapper, since we want to open the
-  selected file in the same window from which =counsel-locate= was
-  called.
 - =unwind= argument is set to =#'counsel-delete-process=: when we press ~C-g~
   we want to kill the running process created by
   =counsel--async-command=.

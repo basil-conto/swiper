@@ -1126,7 +1126,7 @@ Since `execute-kbd-macro' doesn't pick up a let-bound `default-directory'.")
                  (set-keymap-parent map ivy-minibuffer-map)
                  (define-key map "\t" #'ivy-partial)
                  ;; Allow quitting during `execute-kbd-macro'.
-                  ;; See issue #2906 and URL `https://bugs.gnu.org/48603'.
+                 ;; See issue #2906 and URL `https://bugs.gnu.org/48603'.
                  (define-key map "\C-g" #'abort-recursive-edit)
                  map))
               (subdirs '("test1/" "test2/")))

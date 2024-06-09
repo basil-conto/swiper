@@ -439,7 +439,8 @@ Update the minibuffer with the amount of lines collected every
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-.") #'counsel-find-symbol)
     (define-key map (kbd "C-,") #'counsel--info-lookup-symbol)
-    map))
+    map)
+  "Keymap used when completing symbols like variables and functions.")
 
 (ivy-set-actions
  'counsel-describe-variable
@@ -1379,7 +1380,8 @@ INITIAL-INPUT can be given as the initial minibuffer input."
     (define-key map (kbd "M-q") #'counsel-git-grep-query-replace)
     (define-key map (kbd "C-c C-m") #'counsel-git-grep-switch-cmd)
     (define-key map (kbd "C-x C-d") #'counsel-cd)
-    map))
+    map)
+  "Keymap used during `counsel-git-grep' completion.")
 
 (defvar counsel-git-grep-cmd-default "git --no-pager grep -n --no-color -I -e \"%s\""
   "Initial command for `counsel-git-grep'.")
@@ -1841,9 +1843,10 @@ currently checked out."
     (define-key map (kbd "C-DEL") #'counsel-up-directory)
     (define-key map (kbd "C-<backspace>") #'counsel-up-directory)
     (define-key map (kbd "`") #'counsel-file-jump-from-find)
-    (define-key map (kbd "C-`") (ivy-make-magic-action #'counsel-find-file "b"))
+    (define-key map (kbd "C-`") #'counsel-find-file-cd-bookmark-action)
     (define-key map [remap undo] #'counsel-find-file-undo)
-    map))
+    map)
+  "Keymap used during file name completion.")
 
 (defun counsel-file-jump-from-find ()
   "Switch to `counsel-file-jump' from `counsel-find-file'."
@@ -1855,7 +1858,7 @@ currently checked out."
   (add-to-list 'ivy-ffap-url-functions 'counsel-github-url-p)
   (add-to-list 'ivy-ffap-url-functions 'counsel-emacs-url-p))
 (add-to-list 'ivy-ffap-url-functions 'counsel-url-expand)
-(defun counsel-find-file-cd-bookmark-action (_)
+(defun counsel-find-file-cd-bookmark-action (&optional _)
   "Reset `counsel-find-file' from selected directory."
   (ivy-read "cd: "
             (progn
@@ -2951,7 +2954,8 @@ INITIAL-DIRECTORY, if non-nil, is used as the root directory for search."
     (define-key map (kbd "M-q") #'counsel-git-grep-query-replace)
     (define-key map (kbd "C-'") #'swiper-avy)
     (define-key map (kbd "C-x C-d") #'counsel-cd)
-    map))
+    map)
+  "Keymap used during `counsel-ag' completion.")
 
 (defcustom counsel-ag-base-command (list "ag" "--vimgrep" "%s")
   "Template for default `counsel-ag' command.
@@ -3286,7 +3290,8 @@ Example input with inclusion and exclusion file patterns:
     (define-key map (kbd "C-l") #'ivy-call-and-recenter)
     (define-key map (kbd "M-q") #'swiper-query-replace)
     (define-key map (kbd "C-'") #'swiper-avy)
-    map))
+    map)
+  "Keymap used during `counsel-grep' completion.")
 
 (defcustom counsel-grep-base-command "grep -E -n -e %s %s"
   "Format string used by `counsel-grep' to build a shell command.
@@ -4785,7 +4790,8 @@ PREFIX is used to create the key."
 (defvar counsel-imenu-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-l") #'ivy-call-and-recenter)
-    map))
+    map)
+  "Keymap used during `counsel-imenu' completion.")
 
 (defun counsel-imenu-categorize-functions (items)
   "Categorize all the functions of imenu."
@@ -5637,7 +5643,8 @@ You can insert or kill the name of the selected font."
 (defvar counsel-kmacro-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-k") #'counsel-kmacro-kill)
-    map))
+    map)
+  "Keymap used during `counsel-kmacro' completion.")
 
 (defun counsel-kmacro-kill ()
   "Kill the line, or delete the keyboard macro."
@@ -6760,13 +6767,13 @@ handling for the `counsel-compile' metadata."
              cmd 0 (and (get-text-property 0 'cmd cmd)
                         (next-single-property-change 0 'cmd cmd))))))
 
-;; Currently the only thing we do is override ivy's default insert
-;; operation which doesn't include the metadata we want.
+;; Currently the only thing we do is override Ivy's default insert
+;; operation which lacks the metadata we want.
 (defvar counsel-compile-map
   (let ((map (make-sparse-keymap)))
     (define-key map [remap ivy-insert-current] #'counsel-compile-edit-command)
     map)
-  "Additional ivy keybindings during command selection.")
+  "Additional Ivy key bindings for `counsel-compile' completion.")
 
 ;;;###autoload
 (defun counsel-compile (&optional dir)
@@ -7089,7 +7096,7 @@ We update it in the callback with `ivy-update-candidates'."
       (define-key map (vector 'remap (car binding)) (cdr binding)))
     map)
   "Map for `counsel-mode'.
-Remaps built-in functions to counsel replacements.")
+Remaps built-in functions to Counsel replacements.")
 
 (defcustom counsel-mode-override-describe-bindings nil
   "Whether to override `describe-bindings' when `counsel-mode' is active."

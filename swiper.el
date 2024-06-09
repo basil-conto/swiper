@@ -155,14 +155,14 @@ If the input is empty, select the previous history element instead."
 
 (defvar swiper-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-s") 'swiper-C-s)
-    (define-key map (kbd "M-q") 'swiper-query-replace)
-    (define-key map (kbd "C-l") 'swiper-recenter-top-bottom)
-    (define-key map (kbd "C-'") 'swiper-avy)
-    (define-key map (kbd "C-7") 'swiper-mc)
-    (define-key map (kbd "C-c C-f") 'swiper-toggle-face-matching)
+    (define-key map (kbd "C-s") #'swiper-C-s)
+    (define-key map (kbd "M-q") #'swiper-query-replace)
+    (define-key map (kbd "C-l") #'swiper-recenter-top-bottom)
+    (define-key map (kbd "C-'") #'swiper-avy)
+    (define-key map (kbd "C-7") #'swiper-mc)
+    (define-key map (kbd "C-c C-f") #'swiper-toggle-face-matching)
     map)
-  "Keymap for swiper.")
+  "Keymap for `swiper'.")
 
 (defvar swiper--query-replace-overlays nil)
 
@@ -238,11 +238,10 @@ If the input is empty, select the previous history element instead."
                 (swiper--cleanup)
                 (ivy-exit-with-action
                  (lambda (_)
-                   (with-ivy-window
-                     (move-beginning-of-line 1)
-                     (let ((inhibit-read-only t))
-                       (perform-replace from to
-                                        t t nil))))))
+                   (move-beginning-of-line 1)
+                   (let ((inhibit-read-only t))
+                     (perform-replace from to
+                                      t t nil)))))
            (swiper--query-replace-cleanup)))))
 
 (ivy-configure 'swiper-query-replace
@@ -1329,7 +1328,7 @@ See `ivy-format-functions-alist' for further information."
 
 (defvar swiper-all-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "M-q") 'swiper-all-query-replace)
+    (define-key map (kbd "M-q") #'swiper-all-query-replace)
     map)
   "Keymap for `swiper-all'.")
 
@@ -1510,29 +1509,28 @@ Signal an error on failure."
 
 (defun swiper-isearch-action (x)
   "Move to X for `swiper-isearch'."
-  (if (setq x (swiper--isearch-candidate-pos x))
-      (with-ivy-window
-        (goto-char x)
-        (when (and (or (eq this-command 'ivy-previous-line-or-history)
-                       (and (eq this-command 'ivy-done)
-                            (eq last-command 'ivy-previous-line-or-history)))
-                   (looking-back ivy-regex (line-beginning-position)))
-          (goto-char (match-beginning 0)))
-        (funcall isearch-filter-predicate (point) (1+ (point)))
-        (swiper--maybe-recenter)
-        (if (or (eq ivy-exit 'done)
-                ;; FIXME: With the default action 'M-o o', `ivy-exit' remains
-                ;; nil for some reason, so check `this-command' instead to
-                ;; tell whether we're "done".
-                (eq this-command #'ivy-dispatching-done))
-            (progn
-              (swiper--push-mark)
-              (swiper--remember-search-history (ivy--regex ivy-text)))
-          (swiper--cleanup)
-          (swiper--delayed-add-overlays)
-          (swiper--add-cursor-overlay
-           (ivy-state-window ivy-last))))
-    (swiper--cleanup)))
+  (if (not (setq x (swiper--isearch-candidate-pos x)))
+      (swiper--cleanup)
+    (goto-char x)
+    (when (and (or (eq this-command 'ivy-previous-line-or-history)
+                   (and (eq this-command 'ivy-done)
+                        (eq last-command 'ivy-previous-line-or-history)))
+               (looking-back ivy-regex (line-beginning-position)))
+      (goto-char (match-beginning 0)))
+    (funcall isearch-filter-predicate (point) (1+ (point)))
+    (swiper--maybe-recenter)
+    (if (or (eq ivy-exit 'done)
+            ;; FIXME: With the default action 'M-o o', `ivy-exit' remains
+            ;; nil for some reason, so check `this-command' instead to
+            ;; tell whether we're "done".
+            (eq this-command #'ivy-dispatching-done))
+        (progn
+          (swiper--push-mark)
+          (swiper--remember-search-history (ivy--regex ivy-text)))
+      (swiper--cleanup)
+      (swiper--delayed-add-overlays)
+      (swiper--add-cursor-overlay
+       (ivy-state-window ivy-last)))))
 
 (defun swiper-action-copy (_x)
   "Copy line at point and go back."

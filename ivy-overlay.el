@@ -146,8 +146,7 @@ That is, the additional number of columns needed under the mode."
 (defun ivy-display-function-overlay (str)
   "Called from the minibuffer, display STR in an overlay in Ivy window.
 Hide the minibuffer contents and cursor."
-  (if (save-selected-window
-        (select-window (ivy-state-window ivy-last))
+  (if (with-selected-window (ivy-state-window ivy-last)
         (ivy-overlay-impossible-p str))
       (let ((buffer-undo-list t))
         (save-excursion

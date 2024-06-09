@@ -85,11 +85,11 @@ Note: parts of this config can be replaced by using `counsel-mode`.
 [![MELPA Stable](https://stable.melpa.org/packages/counsel-badge.svg)](https://stable.melpa.org/#/counsel)
 
 `ivy-mode` ensures that any Emacs command using
-`completing-read-function` uses ivy for completion.
+`completing-read-function` uses Ivy for completion.
 
 Counsel takes this further, providing versions of common Emacs
-commands that are customised to make the best use of Ivy. For example,
-`counsel-find-file` has some additional keybindings. Pressing
+commands that are customized to make the best use of Ivy. For example,
+`counsel-find-file` has some additional key bindings. Pressing
 <kbd>DEL</kbd> will move you to the parent directory.
 
 Enabling `counsel-mode` remaps built-in Emacs functions that have

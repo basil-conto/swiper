@@ -1126,24 +1126,8 @@ Another common option is @code{ignore}, which does nothing.
 
 An action is a function that is called after you select a candidate
 during completion. This function takes a single string argument, which
-is the selected candidate.
-
-@subsubheading Window context when calling an action
-@indentedblock
-Currently, the action is executed in the minibuffer window
-context. This means e.g. that if you call @code{insert} the text will
-be inserted into the minibuffer.
-
-If you want to execute the action in the initial window from
-which the completion started, use the @code{with-ivy-window} wrapper
-macro.
-
-@lisp
-(defun ivy-insert-action (x)
-  (with-ivy-window
-    (insert x)))
-@end lisp
-@end indentedblock
+is the selected candidate. The action is executed in the context of
+the initial window from which the completion started.
 
 @node How can different actions be called?
 @subsection How can different actions be called?
@@ -1180,20 +1164,19 @@ the window from which @code{ivy-read} was called.
 The second action copies the current candidate to the kill ring.
 
 @lisp
-(defun ivy-yank-action (x)
-  (kill-new x))
-
 (defun ivy-copy-to-buffer-action (x)
-  (with-ivy-window
-    (insert x)))
+  (insert x))
+
+(defun ivy-copy-action (x)
+  (kill-new x))
 
 (ivy-set-actions
  t
  '(("i" ivy-copy-to-buffer-action "insert")
-   ("y" ivy-yank-action "yank")))
+   ("c" ivy-copy-action "copy")))
 @end lisp
 
-Then in any completion session, @kbd{M-o y} invokes @code{ivy-yank-action}, and
+Then in any completion session, @kbd{M-o c} invokes @code{ivy-copy-action}, and
 @kbd{M-o i} invokes @code{ivy-copy-to-buffer-action}.
 
 @menu
@@ -1735,9 +1718,8 @@ INITIAL-INPUT can be given as the initial minibuffer input."
             :dynamic-collection t
             :history 'counsel-locate-history
             :action (lambda (file)
-                      (with-ivy-window
-                        (when file
-                          (find-file file))))
+                      (when file
+                        (find-file file)))
             :unwind #'counsel-delete-process
             :caller 'counsel-locate))
 @end lisp
@@ -1767,10 +1749,6 @@ produce a collection, then decide that you want async and simply swap in
 @code{#'counsel-locate-function} is passed as the @code{collection} argument.
 @item
 @code{dynamic-collection} is set to t, since this is an async collection.
-@item
-@code{action} argument uses @code{with-ivy-window} wrapper, since we want to open the
-selected file in the same window from which @code{counsel-locate} was
-called.
 @item
 @code{unwind} argument is set to @code{#'counsel-delete-process}: when we press @kbd{C-g}
 we want to kill the running process created by
