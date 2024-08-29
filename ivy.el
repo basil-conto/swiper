@@ -2636,21 +2636,23 @@ The previous string is between `ivy-completion-beg' and `ivy-completion-end'."
           (set-marker (overlay-get cursor 'point) (point))
           (set-marker (overlay-get cursor 'mark) (point)))))))
 
+;; FIXME: Suffix rather than prefix or length?
 (defun ivy-completion-common-length (str)
-  "Return the amount of characters that match in  STR.
+  "Return the length of the completion-matching prefix of STR.
 
 `completion-all-completions' computes this and returns the result
 via text properties.
 
-The first non-matching part is propertized:
-- either with: (face (completions-first-difference))
-- or: (font-lock-face completions-first-difference)."
+The first non-matching part has either the `face' or `font-lock-face'
+property value containing the face `completions-first-difference'."
   (let ((char-property-alias-alist '((face font-lock-face)))
         (i (1- (length str))))
     (catch 'done
       (while (>= i 0)
-        (when (equal (get-text-property i 'face str)
-                     '(completions-first-difference))
+        (when (let ((face (get-text-property i 'face str)))
+                (if (consp face)
+                    (ignore-errors (memq 'completions-first-difference face))
+                  (eq 'completions-first-difference face)))
           (throw 'done i))
         (cl-decf i))
       (throw 'done (length str)))))
@@ -2680,6 +2682,7 @@ See `completion-in-region' for further information."
            (when (eq collection 'crm--collection-fn)
              (setq comps (delete-dups comps)))
            (let* ((len (ivy-completion-common-length (car comps)))
+                  (_ (lwarn 'ivy :debug "Comp %S len %S" (car comps) len))
                   (initial (cond ((= len 0)
                                   "")
                                  ((let ((str-len (length str)))

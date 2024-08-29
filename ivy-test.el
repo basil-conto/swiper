@@ -1007,20 +1007,69 @@ Since `execute-kbd-macro' doesn't pick up a let-bound `default-directory'.")
       (ivy-mode ivy-mode-reset-arg))))
 
 (ert-deftest ivy-completion-common-length ()
-  (should (= 2
-             (ivy-completion-common-length
-              #("test/"
-                0 2 (face completions-common-part)
-                2 3 (face (completions-first-difference))))))
-  (should (= 5
-             (ivy-completion-common-length
-              #("Math/E"
-                0 5 (face (completions-common-part))
-                5 6 (face (completions-first-difference))))))
-  (should (= 3
-             (ivy-completion-common-length
-              #("vec"
-                0 3 (face (completions-common-part)))))))
+  (should (= 0 (ivy-completion-common-length "")))
+  (should (= 1 (ivy-completion-common-length "a")))
+  (should (= 2 (ivy-completion-common-length "ab")))
+  (should (= 3 (ivy-completion-common-length "abc")))
+  (should (= 0 (ivy-completion-common-length
+                #("a" 0 1 (face completions-first-difference)))))
+  (should (= 0 (ivy-completion-common-length
+                #("a" 0 1 (face (completions-first-difference))))))
+  (should (= 0 (ivy-completion-common-length
+                #("ab" 0 1 (face completions-first-difference)))))
+  (should (= 0 (ivy-completion-common-length
+                #("ab" 0 1 (face (completions-first-difference))))))
+  (should (= 1 (ivy-completion-common-length
+                #("ab" 0 2 (face completions-first-difference)))))
+  (should (= 1 (ivy-completion-common-length
+                #("ab" 0 2 (face (completions-first-difference))))))
+  (should (= 1 (ivy-completion-common-length
+                #("ab" 1 2 (face completions-first-difference)))))
+  (should (= 1 (ivy-completion-common-length
+                #("ab" 1 2 (face (completions-first-difference))))))
+  (should (= 0 (ivy-completion-common-length
+                #("abc" 0 1 (face completions-first-difference)))))
+  (should (= 0 (ivy-completion-common-length
+                #("abc" 0 1 (face (completions-first-difference))))))
+  (should (= 1 (ivy-completion-common-length
+                #("abc" 0 2 (face completions-first-difference)))))
+  (should (= 1 (ivy-completion-common-length
+                #("abc" 0 2 (face (completions-first-difference))))))
+  (should (= 2 (ivy-completion-common-length
+                #("abc" 0 3 (face completions-first-difference)))))
+  (should (= 2 (ivy-completion-common-length
+                #("abc" 0 3 (face (completions-first-difference))))))
+  (should (= 2 (ivy-completion-common-length
+                #("abc" 1 3 (face completions-first-difference)))))
+  (should (= 2 (ivy-completion-common-length
+                #("abc" 1 3 (face (completions-first-difference))))))
+  (should (= 2 (ivy-completion-common-length
+                #("abc" 2 3 (face completions-first-difference)))))
+  (should (= 2 (ivy-completion-common-length
+                #("abc" 2 3 (face (completions-first-difference))))))
+  (should (= 1 (ivy-completion-common-length
+                #("abc" 1 2 (face completions-first-difference)))))
+  (should (= 1 (ivy-completion-common-length
+                #("abc" 1 2 (face (completions-first-difference))))))
+  (should (= 2 (ivy-completion-common-length
+                #("test/"
+                  0 2 (face completions-common-part)
+                  2 3 (face (completions-first-difference))))))
+  (should (= 2 (ivy-completion-common-length
+                #("test/"
+                  0 2 (face completions-common-part)
+                  2 3 (face completions-first-difference)))))
+  (should (= 5 (ivy-completion-common-length
+                #("Math/E"
+                  0 5 (face (completions-common-part))
+                  5 6 (face (completions-first-difference))))))
+  (should (= 5 (ivy-completion-common-length
+                #("Math/E"
+                  0 5 (face (completions-common-part))
+                  5 6 (face completions-first-difference)))))
+  (should (= 3 (ivy-completion-common-length
+                #("vec"
+                  0 3 (face (completions-common-part)))))))
 
 (ert-deftest ivy--sort-function ()
   "Test `ivy--sort-function' behavior."
