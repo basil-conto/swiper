@@ -297,7 +297,8 @@ caused by spawning too many subprocesses too quickly."
                 (time-to-seconds (time-since counsel--async-start))))
         (let ((re (ivy-re-to-str ivy-regex)))
           (if ivy--old-cands
-              (if (eq (ivy-alist-setting ivy-index-functions-alist) 'ivy-recompute-index-zero)
+              (if (eq (ivy-alist-setting ivy-index-functions-alist)
+                      #'ivy-recompute-index-zero)
                   (ivy-set-index 0)
                 (ivy--recompute-index re ivy--all-candidates))
             ;; index was changed before a long-running query exited

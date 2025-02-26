@@ -145,8 +145,8 @@ bookmarks.  Any other non-nil value includes both."
 Examples of properties include associated `:cleanup' functions.")
 
 (defcustom ivy-display-functions-alist
-  '((ivy-completion-in-region . ivy-display-function-overlay)
-    (t . nil))
+  (list (cons #'ivy-completion-in-region #'ivy-display-function-overlay)
+        (cons t nil))
   "An alist for customizing where to display the candidates.
 
 Each key is a caller symbol.  When the value is nil (the default),
@@ -618,7 +618,7 @@ functionality, e.g. as seen in `isearch'."
   "Store the current overriding `case-fold-search'.")
 
 (defcustom ivy-more-chars-alist
-  '((t . 3))
+  (list (cons t 3))
   "Map commands to their minimum required input length.
 That is the number of characters prompted for before fetching
 candidates.  The special key t is used as a fallback."
@@ -1820,7 +1820,7 @@ minibuffer."
 (ivy--no-M-x #'ivy-toggle-regexp-quote #'ivy--minibuffer-p)
 
 (defcustom ivy-format-functions-alist
-  '((t . ivy-format-function-default))
+  (list (cons t #'ivy-format-function-default))
   "An alist of functions that transform the list of candidates into a string.
 This string is inserted into the minibuffer."
   :type '(alist
@@ -1852,7 +1852,7 @@ Prioritize directories."
     'ido-file-extension-lessp "0.13.0 (2019-10-12)")
 
 (defcustom ivy-sort-functions-alist
-  '((t . ivy-string<))
+  (list (cons t #'ivy-string<))
   "An alist of sorting functions for each collection function.
 Interactive functions that call completion fit in here as well.
 
@@ -1904,7 +1904,7 @@ specified for the current collection in
 (ivy--no-M-x #'ivy-rotate-sort #'ivy--minibuffer-p)
 
 (defcustom ivy-index-functions-alist
-  '((t . ivy-recompute-index-zero))
+  (list (cons t #'ivy-recompute-index-zero))
   "An alist of index recomputing functions for each collection function.
 When the input changes, the appropriate function returns an
 integer - the index of the matched candidate that should be
@@ -1941,11 +1941,12 @@ like.")
   "An alist of highlighting functions for each regex builder function.")
 
 (defcustom ivy-initial-inputs-alist
-  '((org-refile . "^")
-    (org-agenda-refile . "^")
-    (org-capture-refile . "^")
-    (Man-completion-table . "^")
-    (woman . "^"))
+  (copy-alist
+   '((Man-completion-table . "^")
+     (org-agenda-refile . "^")
+     (org-capture-refile . "^")
+     (org-refile . "^")
+     (woman . "^")))
   "An alist associating commands with their initial input.
 
 Each cdr is either a string or a function called in the context
@@ -3862,9 +3863,10 @@ CANDIDATES are assumed to be static."
       (cl-sort (copy-sequence cands) #'< :key #'length))))
 
 (defcustom ivy-sort-matches-functions-alist
-  '((t . nil)
-    (ivy-completion-in-region . ivy--shorter-matches-first)
-    (ivy-switch-buffer . ivy-sort-function-buffer))
+  (copy-alist
+   '((ivy-completion-in-region . ivy--shorter-matches-first)
+     (ivy-switch-buffer . ivy-sort-function-buffer)
+     (t . nil)))
   "An alist of functions for sorting matching candidates.
 
 Unlike `ivy-sort-functions-alist', which is used to sort the
