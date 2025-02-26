@@ -53,6 +53,8 @@ Intended as :after-while advice for `require'."
 (require 'ivy)
 
 (require 'ert)
+(eval-when-compile
+  (require 'subr-x))
 
 (setq ivy-last (make-ivy-state))
 
@@ -465,7 +467,7 @@ Since `execute-kbd-macro' doesn't pick up a let-bound `default-directory'.")
 (ert-deftest ivy--format ()
   (should (string= (let ((ivy--index 10)
                          (ivy-format-functions-alist
-                          '((t . (lambda (x) (mapconcat #'identity x "\n")))))
+                          `((t . ,(lambda (l) (string-join l "\n")))))
                          (cands '("NAME"
                                   "SYNOPSIS"
                                   "DESCRIPTION"
@@ -478,9 +480,16 @@ Since `execute-kbd-macro' doesn't pick up a let-bound `default-directory'.")
                                   "SEE ALSO"
                                   "AUTHOR")))
                      (ivy--format cands))
-                   #("\nDESCRIPTION\nFUNCTION LETTERS\nSWITCHES\nDIAGNOSTICS\nEXAMPLE 1\nEXAMPLE 2\nEXAMPLE 3\nSEE ALSO\nAUTHOR"
-                     0 90 (read-only nil)
-                     90 96 (face ivy-current-match read-only nil)))))
+                   "
+DESCRIPTION
+FUNCTION LETTERS
+SWITCHES
+DIAGNOSTICS
+EXAMPLE 1
+EXAMPLE 2
+EXAMPLE 3
+SEE ALSO
+AUTHOR")))
 
 (ert-deftest ivy--filter ()
   (should (equal (ivy--filter "the" '("foo" "the" "The"))
