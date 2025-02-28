@@ -4446,6 +4446,7 @@ Additional actions:\\<ivy-minibuffer-map>
           (mapconcat #'identity seq "\n")))
     (error str)))
 
+;; `make-separator-line'?
 (defcustom counsel-yank-pop-separator "\n"
   "Separator for the kill ring strings in `counsel-yank-pop'."
   :type '(choice
@@ -5714,6 +5715,7 @@ value of a macro, using them for a new macro."
 (ivy-configure 'counsel-kmacro
   :format-fn #'counsel--kmacro-format-function)
 
+;; `make-separator-line'?
 (defcustom counsel-kmacro-separator "\n------------------------\n"
   "Separator displayed between keyboard macros in `counsel-kmacro'."
   :type 'string)

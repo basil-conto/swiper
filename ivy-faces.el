@@ -114,7 +114,9 @@
   "Face used by Ivy for highlighting the selected prompt line.")
 
 (defface ivy-separator
-  '((t :inherit font-lock-doc-face))
+  `((t :inherit ,(if (facep 'separator-line)
+                     'separator-line
+                   'font-lock-doc-face)))
   "Face for multiline source separator.")
 
 (defface ivy-grep-info
