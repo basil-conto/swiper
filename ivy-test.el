@@ -84,10 +84,15 @@ INPUT.  Use the latter when FN reads input, e.g., via `ivy-read'."
             (use-global-map omap))))
       res)))
 
-(cl-defmacro ivy-test-with (keymap (&rest body) input)
-  "Like `ivy-test-exec', but with a nested BODY in place of a function."
-  (declare (debug (form (def-body) form)) (indent defun))
-  `(ivy-test-exec ,keymap (lambda () ,@body) ,input))
+;; The `eval-and-compile' is a simple way to work around
+;; `https://bugs.gnu.org/24402' in Emacs 25; a more intrusive
+;; alternative being to insert `not', `progn', etc. between
+;; `should' and `ivy-test-with' where needed.
+(eval-and-compile
+  (cl-defmacro ivy-test-with (keymap (&rest body) input)
+    "Like `ivy-test-exec', but with a nested BODY in place of a function."
+    (declare (debug (form (def-body) form)) (indent defun))
+    `(ivy-test-exec ,keymap (lambda () ,@body) ,input)))
 
 (cl-defmacro ivy-test-with-text (keymap text (&rest body) &optional input)
   "Like `ivy-test-with', but for buffer manipulation.
@@ -136,6 +141,23 @@ with \"|\" indicating the final placement of point."
   "Like `command-execute' but sets `this-command' first."
   (setq this-command cmd)
   (apply #'command-execute cmd args))
+
+(defun ivy-test-read-matching (collection &optional require-match)
+  "Like `ivy-completing-read', but also return `ivy--prompt-extra'."
+  ;; In a `noninteractive' session, keyboard input for reading from the
+  ;; minibuffer cannot be simulated via `unread-command-events'.  Instead,
+  ;; `ivy-test-with' simulates the entire interaction as a keyboard macro.
+  ;; But there are further complications with `read-from-minibuffer' (via
+  ;; `ivy-read') in a `noninteractive' session:
+  ;; - If `executing-kbd-macro' (via `ivy-test-with'), `read-from-minibuffer'
+  ;;   quits the minibuffer at the end of the keyboard macro, bypassing
+  ;;   REQUIRE-MATCH logic.
+  ;; - Otherwise, `read-from-minibuffer' waits for input from stdin, which
+  ;;   isn't easy to send input to.
+  ;; So use `ivy--prompt-extra' as a proxy for the presence of a match.
+  (let* ((completing-read-function #'ivy-completing-read)
+         (str (completing-read "" collection nil require-match)))
+    (if ivy--prompt-extra (list str ivy--prompt-extra) str)))
 
 (defun ivy-test= (x y)
   "Like `=', but with relative tolerance between floating-point numbers.
@@ -635,6 +657,113 @@ AUTHOR")))
                    ivy-test-history)
                  '("foo"))))
 
+(ert-deftest ivy-completing-read-can-match ()
+  "Test `ivy-completing-read' with REQUIRE-MATCH nil."
+  (let ((fn #'ivy-test-read-matching))
+    (should (equal (ivy-test-with () ((funcall fn ())) "RET") ""))
+    (should (equal (ivy-test-with () ((funcall fn ())) "a RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "a RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "b RET") "b"))))
+
+(ert-deftest ivy-completing-read-must-match ()
+  "Test `ivy-completing-read' with REQUIRE-MATCH t/other."
+  (let ((fn #'ivy-test-read-matching))
+    (dolist (req '(t 0))
+      (should (equal (ivy-test-with () ((funcall fn () req)) "RET") ""))
+      (should (equal (ivy-test-with () ((funcall fn () req)) "a RET")
+                     '("" require-match)))
+      (should (equal (ivy-test-with () ((funcall fn '("a") req)) "RET") "a"))
+      (should (equal (ivy-test-with () ((funcall fn '("a") req)) "a RET") "a"))
+      (should (equal (ivy-test-with () ((funcall fn '("a") req)) "b RET")
+                     '("" require-match))))))
+
+(ert-deftest ivy-completing-read-confirm ()
+  "Test `ivy-completing-read' with a `confirm' REQUIRE-MATCH."
+  (let ((fn (lambda (coll) (ivy-test-read-matching coll 'confirm))))
+    (should (equal (ivy-test-with () ((funcall fn ())) "RET") ""))
+    (should (equal (ivy-test-with () ((funcall fn ())) "a RET RET")
+                   '("a" confirm)))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "a RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "b RET RET")
+                   '("b" confirm)))))
+
+(ert-deftest ivy-completing-read-confirm-after ()
+  "Test `ivy-completing-read' with `confirm-after-completion'."
+  (let ((fn (lambda (coll)
+              (ivy-test-read-matching coll 'confirm-after-completion))))
+    (should (equal (ivy-test-with () ((funcall fn ())) "RET") ""))
+    (should (equal (ivy-test-with () ((funcall fn ())) "a RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn ())) "a TAB RET RET")
+                   '("a" confirm)))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "TAB RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "a RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "b RET") "b"))
+    (should (equal (ivy-test-with () ((funcall fn '("a"))) "b TAB RET RET")
+                   '("b" confirm)))
+    (let ((ivy-confirm-exit-commands ()))
+      (should (equal (ivy-test-with () ((funcall fn '("a"))) "b TAB RET") "b")))
+    (let ((ivy-confirm-exit-commands (list #'self-insert-command)))
+      (should (equal (ivy-test-with () ((funcall fn '("a"))) "b RET RET")
+                     '("b" confirm))))
+    (should (equal (ivy-test-with () ((funcall fn '("ab" "ac"))) "TAB TAB")
+                   "ab"))
+    (should (equal (ivy-test-with () ((funcall fn '("ab" "ac"))) "TAB RET")
+                   "ab"))))
+
+(declare-function always "subr" (&rest _))
+(ert-deftest ivy-completing-read-must-match-fn ()
+  "Test `ivy-completing-read' with a REQUIRE-MATCH function."
+  (skip-unless (>= emacs-major-version 29))
+  (let ((fn #'ivy-test-read-matching))
+    ;; Accept all inputs.
+    (should (equal (ivy-test-with () ((funcall fn () #'always)) "RET") ""))
+    (should (equal (ivy-test-with () ((funcall fn () #'always)) "a RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a") #'always)) "RET") "a"))
+    (should (equal (ivy-test-with () ((funcall fn '("a") #'always)) "b RET")
+                   "b"))
+    ;; Accept only empty input.
+    (should (equal (ivy-test-with () ((funcall fn () #'ignore)) "RET") ""))
+    (should (equal (ivy-test-with () ((funcall fn () #'ignore)) "a RET")
+                   '("" require-match)))
+    (should (equal (ivy-test-with () ((funcall fn '("a") #'ignore)) "RET")
+                   '("" require-match)))
+    (should (equal (ivy-test-with () ((funcall fn '("a") #'ignore)) "b RET")
+                   '("" require-match)))
+    ;; Not called for empty inputs.
+    (should-not (ivy-test-with ()
+                  ((let (called)
+                     (funcall fn () (lambda (_) (setq called t)))
+                     called))
+                  "RET"))
+    ;; Called with input as argument.
+    (should (equal (ivy-test-with ()
+                     ((let (arg)
+                        (funcall fn () (lambda (in) (setq arg in)))
+                        arg))
+                     "a RET")
+                   "a"))
+    (should (equal (ivy-test-with ()
+                     ((let (arg)
+                        (funcall fn '("a") (lambda (in) (setq arg in)))
+                        arg))
+                     "RET")
+                   "a"))
+    (should (equal (ivy-test-with ()
+                     ((let (arg)
+                        (funcall fn '("a") (lambda (in) (setq arg in)))
+                        arg))
+                     "a RET")
+                   "a"))
+    (should (equal (ivy-test-with ()
+                     ((let (arg)
+                        (funcall fn '("a") (lambda (in) (setq arg in)))
+                        arg))
+                     "b RET")
+                   "b"))))
+
 (ert-deftest ivy-completing-read-def-handling ()
   ;; DEF in COLLECTION.
   (should (equal "b" (ivy-test-with ()
@@ -901,7 +1030,7 @@ AUTHOR")))
     (should (equal (ivy-test-with ()
                      ((ivy-read "Find file: " #'read-file-name-internal
                                 :predicate #'file-exists-p
-                                :require-match 'confirm-after-completion
+                                :require-match t
                                 :initial-input absname
                                 :preselect absname
                                 :def absname
@@ -985,22 +1114,43 @@ AUTHOR")))
                      (nth 1 test))
                    (nth 2 test)))))
 
-(ert-deftest ivy-use-selectable-prompt-mustmatch ()
+(ert-deftest ivy-use-selectable-prompt-must-match ()
   "Test `ivy-use-selectable-prompt' with `:require-match'."
-  (let ((ivy-use-selectable-prompt t))
-    (should (equal (ivy-test-with ()
-                     ((ivy-read "Prompt: " '("a" "b") :require-match t))
-                     "C-p C-m")
-                   "a"))
-    (should (equal (ivy-test-with ()
-                     ((ivy-read "Prompt: " '("" "a" "b") :require-match t))
-                     "C-p C-m")
-                   ""))
-    (let ((completing-read-function #'ivy-completing-read))
-      (should (equal (ivy-test-with ()
-                       ((completing-read "Position: " '("" "a" "b") nil t))
-                       "C-p C-m")
-                     "")))))
+  (let ((ivy-use-selectable-prompt t)
+        (fn #'ivy-test-read-matching))
+    (dolist (req '(nil confirm-after-completion))
+      (dolist (coll '(() ("") ("aa") ("" "aa") ("aa" "")))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "C-p C-m") ""))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "a C-p C-m")
+                       "a"))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "b C-p C-m")
+                       "b"))))
+    (dolist (req '(t 0 ignore))
+      (dolist (coll '(() ("") ("aa") ("" "aa") ("aa" "")))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "C-p C-m")
+                       "")))
+      (dolist (coll '(() ("")))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "a C-p C-m")
+                       '("" require-match))))
+      (dolist (coll '(("aa") ("" "aa") ("aa" "")))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "a C-p C-m")
+                       "a"))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "b C-p C-m")
+                       '("" require-match)))))
+    (let ((req 'confirm))
+      (dolist (coll '(() ("") ("aa") ("" "aa") ("aa" "")))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "C-p C-m")
+                       "")))
+      (dolist (coll '(() ("")))
+        (should (equal (ivy-test-with () ((funcall fn coll req))
+                         "a C-p C-m C-m")
+                       '("a" confirm))))
+      (dolist (coll '(("aa") ("" "aa") ("aa" "")))
+        (should (equal (ivy-test-with () ((funcall fn coll req)) "a C-p C-m")
+                       "a"))
+        (should (equal (ivy-test-with () ((funcall fn coll req))
+                         "b C-p C-m C-m")
+                       '("b" confirm)))))))
 
 (ert-deftest ivy--minibuffer-index-bounds ()
   (should (equal (ivy--minibuffer-index-bounds 0 1 10) '(0 1 0)))
