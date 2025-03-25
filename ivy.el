@@ -721,22 +721,29 @@ candidate, not the prompt."
     (setq ivy-current-prefix-arg current-prefix-arg)
     (let ((require-match (ivy-state-require-match ivy-last))
           (input (ivy--input)))
+      ;; FIXME: Is it?
+      (cl-assert (equal input ivy-text) t)
       (delete-minibuffer-contents)
+
+      ;; (cond ((eq this-command 'ivy-dispatching-done)
+
       (cond ((and (= ivy--length 0)
                   (eq this-command 'ivy-dispatching-done))
              (ivy--done ivy-text))
             ((or (> ivy--length 0)
-                 ;; the action from `ivy-dispatching-done' may not need a
-                 ;; candidate at all
+                 ;; The action from `ivy-dispatching-done' may not need a
+                 ;; candidate at all.
                  (eq this-command 'ivy-dispatching-done))
              (ivy--done (ivy-state-current ivy-last)))
             ((string= " (confirm)" ivy--prompt-extra)
              (ivy--done ivy-text))
             ((or (and (memq (ivy-state-collection ivy-last)
                             '(read-file-name-internal internal-complete-buffer))
-                      (eq confirm-nonexistent-file-or-buffer t))
+                      (null (memq confirm-nonexistent-file-or-buffer
+                                  '(nil after-completion))))
                  (and (functionp require-match)
-                      (setq require-match (funcall require-match))))
+                      ;; FIXME
+                      (setq require-match (funcall require-match input))))
              (setq ivy--prompt-extra " (confirm)")
              (insert input)
              (ivy--exhibit))
