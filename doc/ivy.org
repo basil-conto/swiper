@@ -730,26 +730,31 @@ installed.
 - =ivy-confirm-face= ::
      Highlights the "(confirm)" part of the prompt.
 
-     When =confirm-nonexistent-file-or-buffer= is set to =t=,
-     confirming non-existent files in =ivy-mode= requires an
-     additional ~RET~.
+     Some completion sessions allow exiting with arbitrary input text,
+     but require confirmation when the input does not correspond to
+     one of the given completion candidates.
 
-     The confirmation prompt will use this face.
+     The confirmation prompt uses this face.
 
-     For example:
+     For example, the setting
 
      #+begin_src elisp
      (setopt confirm-nonexistent-file-or-buffer t)
      #+end_src
 
-     Then call =find-file=, enter "eldorado" and press ~RET~ --- the
-     prompt will have "(confirm)" appended.  Press ~RET~ once more
-     to confirm, or any key to continue the completion.
+     means that commands that visit files (e.g., =find-file=) or
+     buffers (e.g., =switch-to-buffer=) will ask before visiting
+     a file or buffer name that does not exist.
+
+     More concretely, if you call =find-file=, type in a nonexistent
+     file name such as "eldorado", and press ~RET~ --- the prompt will
+     have "(confirm)" appended.  Press ~RET~ once more to confirm, or
+     any key to continue the completion.
 - =ivy-match-required-face= ::
      Highlights the "(match required)" part of the prompt.
 
      When completions have to match available candidates and cannot
-     take random input, the "(match required)" prompt signals this
+     take arbitrary input, the "(match required)" prompt signals this
      constraint.
 
      For example, call =describe-variable=, enter "waldo" and press

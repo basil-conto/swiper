@@ -567,15 +567,23 @@ Use `ivy-use-ignore-default' for a permanent configuration.")
   "Store the format-style prompt.
 When non-nil, it should contain at least one %d.")
 
-(defvar ivy--prompt-extra ""
-  "Temporary modifications to the prompt.")
+(defvar ivy--prompt-extra nil
+  "A temporary addition to the prompt.")
+
+(defvar ivy--prompt-extras
+  '((confirm "confirm" ivy-confirm-face)
+    (require-match "match required" ivy-match-required-face))
+  "Alist of `ivy--prompt-extra' values and their meaning.
+Each entry is of the form (SYM STR FACE) where SYM identifies
+the addition to the prompt, and STR is its print representation
+with FACE optionally applied.")
 
 (defvar ivy--old-re nil
   "Store the old regexp.
 Either a string or a list for `ivy-re-match'.")
 
 (defvar ivy--old-cands nil
-  "Store the candidates matched by `ivy--old-re'.")
+  "Store the list of candidates matched by `ivy--old-re'.")
 
 (defvar ivy--highlight-function 'ivy--highlight-default
   "Current function for formatting the candidates.")
@@ -680,7 +688,8 @@ REGEXP non-nil means treat STRING as a regexp."
     ((eq (ivy-state-history ivy-last) 'grep-files-history)
      text)
     (ivy--directory
-     (if (and (string-match-p "^/" text) (file-remote-p ivy--directory))
+     (if (and (= (string-to-char text) ?/)
+              (file-remote-p ivy--directory))
          (let ((parts (split-string ivy--directory ":")))
            (concat (nth 0 parts) ":" (nth 1 parts) ":" text))
        (expand-file-name text ivy--directory)))
@@ -713,27 +722,15 @@ prompt is selected wraps around to the last candidate, while calling
 candidate, not the prompt."
   :type 'boolean)
 
-(defvar ivy--use-selectable-prompt nil
-  "Store the effective `ivy-use-selectable-prompt' for current session.")
-
-(defun ivy--prompt-selectable-p ()
-  "Return t if the prompt line is selectable."
-  (and ivy-use-selectable-prompt
-       (or (memq (ivy-state-require-match ivy-last)
-                 '(nil confirm confirm-after-completion))
-           ;; :require-match is t, but "" is in the collection
-           (let ((coll (ivy-state-collection ivy-last)))
-             (and (listp coll)
-                  (if (consp (car coll))
-                      (member '("") coll)
-                    (member "" coll)))))))
-
 (defun ivy--prompt-selected-p ()
-  "Return t if the prompt line is selected."
-  (and ivy--use-selectable-prompt
-       (= ivy--index -1)))
+  "Return non-nil if the prompt line is selected."
+  (and ivy-use-selectable-prompt
+       (< ivy--index 0)))
 
 ;;; Commands
+
+(defvar ivy-confirm-exit-commands (list #'ivy-partial #'ivy-partial-or-done)
+  "Ivy-specific `minibuffer-confirm-exit-commands'.")
 
 (defun ivy-done ()
   "Exit the minibuffer with the selected candidate."
@@ -741,33 +738,36 @@ candidate, not the prompt."
   (if (ivy--prompt-selected-p)
       (ivy-immediate-done)
     (setq ivy-current-prefix-arg current-prefix-arg)
-    (let ((require-match (ivy-state-require-match ivy-last))
-          (input (ivy--input)))
+    (let* ((matching (> ivy--length 0))
+           (cand (if matching (ivy-state-current ivy-last) ivy-text))
+           (require-match (ivy-state-require-match ivy-last))
+           ;; FIXME: When does this differ from `ivy-text'?
+           (input (ivy--input))
+           (msg (lambda (x)
+                  (setq ivy--prompt-extra x)
+                  (insert input)
+                  (ivy--exhibit))))
       (delete-minibuffer-contents)
-      (cond ((and (= ivy--length 0)
-                  (eq this-command 'ivy-dispatching-done))
-             (ivy--done ivy-text))
-            ((or (> ivy--length 0)
-                 ;; the action from `ivy-dispatching-done' may not need a
-                 ;; candidate at all
-                 (eq this-command 'ivy-dispatching-done))
-             (ivy--done (ivy-state-current ivy-last)))
-            ((string= " (confirm)" ivy--prompt-extra)
-             (ivy--done ivy-text))
-            ((or (and (memq (ivy-state-collection ivy-last)
-                            '(read-file-name-internal internal-complete-buffer))
-                      (eq confirm-nonexistent-file-or-buffer t))
-                 (and (functionp require-match)
-                      (setq require-match (funcall require-match))))
-             (setq ivy--prompt-extra " (confirm)")
-             (insert input)
-             (ivy--exhibit))
-            ((memq require-match '(nil confirm confirm-after-completion))
-             (ivy--done ivy-text))
-            (t
-             (setq ivy--prompt-extra " (match required)")
-             (insert ivy-text)
-             (ivy--exhibit))))))
+      (cond ((and (not matching)
+                  ;; The action from `ivy-dispatching-done'
+                  ;; may not need a candidate at all.
+                  (or (eq this-command #'ivy-dispatching-done)
+                      (equal cand "")))
+             (ivy--done cand))
+            ((functionp require-match)
+             (if (funcall require-match cand)
+                 (ivy--done cand)
+               (funcall msg 'require-match)))
+            ((or matching (not require-match)
+                 (eq ivy--prompt-extra 'confirm)
+                 (and (eq require-match 'confirm-after-completion)
+                      (not (or (memq last-command ivy-confirm-exit-commands)
+                               (memq last-command
+                                     minibuffer-confirm-exit-commands)))))
+             (ivy--done cand))
+            ((memq require-match '(confirm confirm-after-completion))
+             (funcall msg 'confirm))
+            ((funcall msg 'require-match))))))
 (ivy--no-M-x #'ivy-done #'ivy--minibuffer-p)
 
 (defvar ivy-mouse-1-tooltip
@@ -1050,13 +1050,14 @@ Is is a cons cell, related to `tramp-get-completion-function'."
 
 (defun ivy-alt-done (&optional arg)
   "Exit the minibuffer with the selected candidate.
-When ARG is t, exit with current text, ignoring the candidates.
+When ARG is non-nil, exit with current text, ignoring the candidates.
 When the current candidate during file name completion is a
 directory, continue completion from within that directory instead
 of exiting.  This function is otherwise like `ivy-done'."
   (interactive "P")
   (setq ivy-current-prefix-arg current-prefix-arg)
   (let (alt-done-fn)
+    ;; CHECK
     (cond ((or arg (ivy--prompt-selected-p))
            (ivy-immediate-done))
           ((setq alt-done-fn (ivy-alist-setting ivy-alt-done-functions-alist))
@@ -1190,7 +1191,7 @@ When this directory doesn't exist, return nil."
         full-name))))
 
 (defcustom ivy-tab-space nil
-  "When non-nil, `ivy-partial-or-done' should insert a space."
+  "When non-nil, `ivy-partial' and `ivy-partial-or-done' insert a space."
   :type 'boolean)
 
 (defun ivy--cycle-p ()
@@ -1274,6 +1275,7 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
                    new))
          (ivy-set-text
           (concat
+           ;; FIXME: simplify
            (mapconcat #'identity parts " ")
            (and ivy-tab-space (not (= (length ivy--old-cands) 1)) " ")))
          (insert ivy-text)
@@ -1411,13 +1413,11 @@ if one exists."
 (defun ivy-next-line (&optional arg)
   "Move cursor vertically down ARG candidates."
   (interactive "p")
-  (setq arg (or arg 1))
-  (let ((index (+ ivy--index arg)))
-    (if (> index (1- ivy--length))
-        (if ivy-wrap
-            (ivy-beginning-of-buffer)
-          (ivy-set-index (1- ivy--length)))
-      (ivy-set-index index))))
+  (let ((index (+ ivy--index (or arg 1)))
+        (max-index (1- ivy--length)))
+    (if (and (> index max-index) ivy-wrap)
+        (ivy-beginning-of-buffer)
+      (ivy-set-index (min index max-index)))))
 (ivy--no-M-x #'ivy-next-line #'ivy--minibuffer-p)
 
 (defun ivy-next-line-or-history (&optional arg)
@@ -1433,14 +1433,11 @@ If the input is empty, select the previous history element instead."
 (defun ivy-previous-line (&optional arg)
   "Move cursor vertically up ARG candidates."
   (interactive "p")
-  (setq arg (or arg 1))
-  (let ((index (- ivy--index arg))
-        (min-index (if ivy--use-selectable-prompt -1 0)))
-    (if (< index min-index)
-        (if ivy-wrap
-            (ivy-end-of-buffer)
-          (ivy-set-index min-index))
-      (ivy-set-index index))))
+  (let ((index (- ivy--index (or arg 1)))
+        (min-index (if ivy-use-selectable-prompt -1 0)))
+    (if (and (< index min-index) ivy-wrap)
+        (ivy-end-of-buffer)
+      (ivy-set-index (max index min-index)))))
 (ivy--no-M-x #'ivy-previous-line #'ivy--minibuffer-p)
 
 (defun ivy-previous-line-or-history (arg)
@@ -1618,7 +1615,15 @@ See variable `ivy-recursive-restore' for further information."
               ivy-inhibit-action
             (and (not ivy-inhibit-action)
                  (ivy--get-action ivy-last))))
-         (current (ivy-state-current ivy-last))
+         (current
+          ;; A require-match function is special in Ivy: it can reject an
+          ;; otherwise valid, selected candidate, even with null input.
+          ;; This override is mainly needed for `ivy-test-with';
+          ;; usually interactive completion shouldn't reach here.
+          (if (and (eq ivy--prompt-extra 'require-match)
+                   (functionp (ivy-state-require-match ivy-last)))
+              ""
+            (ivy-state-current ivy-last)))
          (x (ivy--call-cand current))
          (res
           (cond
@@ -2249,7 +2254,7 @@ PREDICATE is applied to filter out the COLLECTION immediately.
 This argument is for compatibility with `completing-read'.
 
 When REQUIRE-MATCH is non-nil, only members of COLLECTION can be
-selected.  It can also be a lambda.
+selected.  It is normally a symbol or a function.
 
 If INITIAL-INPUT is non-nil, then insert that input in the
 minibuffer initially.
@@ -2532,6 +2537,7 @@ This is useful for recursive `ivy-read'."
              (setq sort nil)
              (setq coll (ivy--sorted-files ivy--directory))
              (when initial-input
+               ;; CHECK
                (unless (or require-match
                            (equal initial-input default-directory)
                            (equal initial-input ""))
@@ -2616,7 +2622,6 @@ This is useful for recursive `ivy-read'."
               (buffer-substring (region-beginning) (region-end))
             (ivy-thing-at-point)))
     (setq ivy--prompt (ivy-add-prompt-count (ivy--quote-format-string prompt)))
-    (setq ivy--use-selectable-prompt (ivy--prompt-selectable-p))
     (setf (ivy-state-initial-input ivy-last) initial-input)))
 
 (defun ivy-add-prompt-count (prompt)
@@ -2654,16 +2659,17 @@ That is, if we are called from `completing-read-multiple'."
                               history def inherit-input-method)
   "Read a string in the minibuffer, with completion.
 
-This interface conforms to `completing-read' and can be used for
-`completing-read-function'.
+This interface conforms to `completing-read' (which see)
+and can be used as `completing-read-function'.
 
 PROMPT is a string that normally ends in a colon and a space.
-COLLECTION is either a list of strings, an alist, an obarray, or a hash table.
+COLLECTION is either a list of strings, an alist, an obarray,
+ a hash table, or a function.
 PREDICATE limits completion to a subset of COLLECTION.
-REQUIRE-MATCH is a boolean value or a symbol.  See `completing-read'.
-INITIAL-INPUT is a string inserted into the minibuffer initially.
-HISTORY is a list of previously selected inputs.
-DEF is the default value.
+REQUIRE-MATCH is normally a symbol or a function.
+INITIAL-INPUT is inserted into the minibuffer before completion.
+HISTORY identifies a list of previously selected inputs.
+DEF is the default value or the list of default values.
 INHERIT-INPUT-METHOD is currently ignored."
   (let ((handler
          (and (< ivy-completing-read-ignore-handlers-depth (minibuffer-depth))
@@ -2690,6 +2696,7 @@ INHERIT-INPUT-METHOD is currently ignored."
           (setq initial-input (nth (1- (cdr history))
                                    (symbol-value (car history)))))
         (setq history (car history)))
+      ;; FIXME: Why?  Doesn't this lose future history?
       (when (consp def)
         (setq def (car def)))
       (let ((str (ivy-read
@@ -2713,6 +2720,7 @@ INHERIT-INPUT-METHOD is currently ignored."
                               collection
                             this-command))))
         (if (string= str "")
+            ;; FIXME
             ;; For `completing-read' compat, return the first element of
             ;; DEFAULT, if it is a list; "", if DEFAULT is nil; or DEFAULT.
             (or def "")
@@ -2724,11 +2732,10 @@ INHERIT-INPUT-METHOD is currently ignored."
        history def inherit-input-method)
   "Same as `ivy-completing-read' but with different handling of DEF.
 
-Specifically, if DEF is nil, it is treated the same as if DEF was
-the empty string. This mimics the behavior of
-`completing-read-default'. This function can therefore be used in
-place of `ivy-completing-read' for commands that rely on this
-behavior."
+Specifically, if DEF is nil, it is treated the same as if DEF was the
+empty string.  This mimics the behavior of `completing-read-default'.
+This function can therefore be used in place of `ivy-completing-read'
+for commands that rely on this behavior."
   (ivy-completing-read
    prompt collection predicate require-match initial-input
    history (or def "") inherit-input-method))
@@ -3303,12 +3310,11 @@ return the propertized PROMPT, which may be modified in-place.")
 PROPS is a plist of default text properties to apply to these
 parts beyond their respective faces `ivy-confirm-face' and
 `ivy-match-required-face'."
-  (dolist (pair '(("confirm" . ivy-confirm-face)
-                  ("match required" . ivy-match-required-face)))
-    (let* ((beg (ivy--string-search (car pair) prompt))
-           (end (and beg (+ beg (length (car pair))))))
+  (dolist (extra ivy--prompt-extras)
+    (let* ((beg (ivy--string-search (nth 1 extra) prompt))
+           (end (and beg (+ beg (length (nth 1 extra))))))
       (when beg
-        (add-face-text-property beg end (cdr pair) nil prompt)
+        (add-face-text-property beg end (nth 2 extra) nil prompt)
         (add-text-properties beg end props prompt))))
   prompt)
 
@@ -3373,7 +3379,7 @@ Also handle `ivy-set-prompt-text-properties-function'."
   (when (setq ivy--prompt (ivy-prompt))
     (unless (memq this-command '(ivy-done ivy-alt-done ivy-partial-or-done
                                  counsel-find-symbol))
-      (setq ivy--prompt-extra ""))
+      (setq ivy--prompt-extra nil))
     (let (head tail)
       (if (string-match "\\(.*?\\)\\(:? ?\\)\\'" ivy--prompt)
           (progn
@@ -3393,7 +3399,8 @@ Also handle `ivy-set-prompt-text-properties-function'."
                 (if (string-match-p "%d.*%d" ivy-count-format)
                     (format head (min (1+ ivy--index) count) count)
                   (format head count)))
-              ivy--prompt-extra
+              (let ((extra (assq ivy--prompt-extra ivy--prompt-extras)))
+                (and extra (format " (%s)" (nth 1 extra))))
               tail))
             (d-str (if ivy--directory
                        (abbreviate-file-name ivy--directory)
@@ -3417,13 +3424,14 @@ Also handle `ivy-set-prompt-text-properties-function'."
             (setq n-str (concat n-str "\n")))
           (setq n-str (ivy--break-lines n-str (window-width)))
           (insert (ivy--propertize-prompt n-str)))
+        ;; CHECK
         ;; Mark prompt as selected if the user moves there or it is the only
         ;; option left.  Since the user input stays put, we have to manually
         ;; remove the face as well.
-        (when ivy--use-selectable-prompt
+        (when ivy-use-selectable-prompt
           (let ((prompt (minibuffer-prompt-end))
                 (eol (ivy--pos-eol)))
-            (if (= ivy--index -1)
+            (if (< ivy--index 0)
                 (add-face-text-property prompt eol 'ivy-prompt-match)
               (remove-list-of-text-properties prompt eol '(face)))))
         ;; get out of the prompt area
@@ -3496,6 +3504,7 @@ Possible choices are `ivy-magic-slash-non-match-cd-selected',
                (and (or (> ivy--index 0)
                         (= ivy--length 1)
                         magic)
+                    ;; CHECK
                     (not (ivy--prompt-selected-p))
                     (not (equal (ivy-state-current ivy-last) ""))
                     (file-directory-p (ivy-state-current ivy-last))
@@ -4955,6 +4964,7 @@ CANDS are the candidates to be displayed."
   "Switch to another buffer."
   (interactive)
   (ivy-read "Switch to buffer: " #'internal-complete-buffer
+            :require-match (confirm-nonexistent-file-or-buffer)
             :keymap ivy-switch-buffer-map
             :preselect (buffer-name (other-buffer (current-buffer)))
             :action #'ivy--switch-buffer-action
@@ -4978,6 +4988,7 @@ CANDS are the candidates to be displayed."
   "Switch to another buffer in another window."
   (interactive)
   (ivy-read "Switch to buffer in other window: " #'internal-complete-buffer
+            :require-match (confirm-nonexistent-file-or-buffer)
             :matcher #'ivy--switch-buffer-matcher
             :preselect (buffer-name (other-buffer (current-buffer)))
             :action #'ivy--switch-buffer-other-window-action

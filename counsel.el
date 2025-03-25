@@ -2249,7 +2249,7 @@ The preselect behavior can be customized via user options
               :initial-input initial-input
               :action action
               :preselect (counsel--preselect-file)
-              :require-match 'confirm-after-completion
+              :require-match (confirm-nonexistent-file-or-buffer)
               :history 'file-name-history
               :keymap counsel-find-file-map
               :caller caller)))
@@ -2997,6 +2997,7 @@ FZF-PROMPT, if non-nil, is passed as `ivy-read' prompt argument."
             (funcall counsel-fzf-dir-function)))
   (ivy-read (or fzf-prompt "fzf: ")
             #'counsel-fzf-function
+            :require-match (confirm-nonexistent-file-or-buffer)
             :initial-input initial-input
             :re-builder #'ivy--regex-fuzzy
             :dynamic-collection t
@@ -3125,7 +3126,7 @@ INITIAL-DIRECTORY, if non-nil, is used as the root directory for search."
               :initial-input initial-input
               :action #'find-file
               :preselect (counsel--preselect-file)
-              :require-match 'confirm-after-completion
+              :require-match (confirm-nonexistent-file-or-buffer)
               :history 'file-name-history
               :keymap counsel-file-jump-map
               :caller 'counsel-file-jump)))
@@ -3157,6 +3158,7 @@ INITIAL-DIRECTORY, if non-nil, is used as the root directory for search."
     (ivy-read "Find directory: "
               (cdr
                (counsel--find-return-list counsel-dired-jump-args))
+              :require-match t
               :matcher #'counsel--find-file-matcher
               :initial-input initial-input
               :action (lambda (d) (dired-jump nil (expand-file-name d)))
