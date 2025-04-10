@@ -1394,6 +1394,7 @@ See `ivy-format-functions-alist' for further information."
 
 (defun swiper-match-usable-p ()
   (or search-invisible
+      ;; FIXME: avoid `cl-find'?
       (not (cl-find-if
             (lambda (ov)
               (invisible-p (overlay-get ov 'invisible)))
