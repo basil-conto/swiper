@@ -500,7 +500,7 @@ From info node `(elisp) Comparison of Numbers'."
   (should (equal (ivy--regex-ignore-order "one two !three four")
                  '(("one" . t) ("two" . t) ("three") ("four"))))
   (should (equal (ivy--regex-ignore-order "!three four")
-                 '(("three") ("four"))))
+                 '(("" . t) ("three") ("four"))))
   ;; Support escaping ! and spaces.
   (should (equal (ivy--regex-ignore-order "one\\ two")
                  '(("one two" . t))))
