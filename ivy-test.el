@@ -449,7 +449,7 @@ Since `execute-kbd-macro' doesn't pick up a let-bound `default-directory'.")
   (should (equal (ivy--regex-ignore-order "one two !three four")
                  '(("one" . t) ("two" . t) ("three") ("four"))))
   (should (equal (ivy--regex-ignore-order "!three four")
-                 '(("three") ("four"))))
+                 '(("" . t) ("three") ("four"))))
   ;; Support escaping ! and spaces.
   (should (equal (ivy--regex-ignore-order "one\\ two")
                  '(("one two" . t))))
