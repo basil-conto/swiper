@@ -573,7 +573,7 @@ Either a string or a list for `ivy-re-match'.")
 (defvar ivy--old-cands nil
   "Store the candidates matched by `ivy--old-re'.")
 
-(defvar ivy--highlight-function 'ivy--highlight-default
+(defvar ivy--highlight-function #'ivy--highlight-default
   "Current function for formatting the candidates.")
 
 (defvar ivy--subexps 0
@@ -1913,31 +1913,29 @@ selected."
 
 (defvar ivy-re-builders-alist
   '((t . ivy--regex-plus))
-  "An alist of regex building functions for each collection function.
+  "An alist of regexp building functions for each collection function.
 
-Each key is (in order of priority):
-1. The actual collection function, e.g. `read-file-name-internal'.
-2. The symbol passed by :caller into `ivy-read'.
+Each key is (in order of descending priority):
+1. The actual collection function, e.g., `read-file-name-internal'.
+2. The symbol passed by :caller to `ivy-read'.
 3. `this-command'.
 4. t.
 
 Each value is a function that should take a string and return a
-valid regex or a regex sequence (see below).
+valid regexp or regexp sequence (see below).
 
-Possible choices: `ivy--regex', `regexp-quote',
+Possible function choices: `ivy--regex', `regexp-quote',
 `ivy--regex-plus', `ivy--regex-fuzzy', `ivy--regex-ignore-order'.
 
-If a function returns a list, it should format like this:
-\\='((\"matching-regexp\" . t) (\"non-matching-regexp\") ...).
-
-The matches will be filtered in a sequence, you can mix the
-regexps that should match and that should not match as you
-like.")
+If a function returns a list, its elements should be of the form
+\(REGEXP . MATCH), where MATCH is a boolean value that determines
+whether the corresponding REGEXP should match a given candidate.
+Any number of cons pairs can appear in the list, and in any order.")
 
 (defvar ivy-highlight-functions-alist
-  '((ivy--regex-ignore-order . ivy--highlight-ignore-order)
-    (ivy--regex-fuzzy . ivy--highlight-fuzzy)
-    (ivy--regex-plus . ivy--highlight-default))
+  `((,#'ivy--regex-ignore-order . ,#'ivy--highlight-ignore-order)
+    (,#'ivy--regex-fuzzy . ,#'ivy--highlight-fuzzy)
+    (,#'ivy--regex-plus . ,#'ivy--highlight-default))
   "An alist of highlighting functions for each regex builder function.")
 
 (defcustom ivy-initial-inputs-alist
@@ -3104,16 +3102,18 @@ foo\\!bar -> matches \"foo!bar\"
 foo\\ bar -> matches \"foo bar\"
 
 Returns a list suitable for `ivy-re-match'."
-  (setq str (ivy--trim-trailing-re str))
-  (let* (regex-parts
-         (raw-parts (ivy--split-negation str)))
-    (dolist (part (ivy--split-spaces (car raw-parts)))
-      (push (cons part t) regex-parts))
-    (when (cdr raw-parts)
-      (dolist (part (ivy--split-spaces (cadr raw-parts)))
-        (push (cons part nil) regex-parts)))
-    (if regex-parts (nreverse regex-parts)
-      "")))
+  (let* ((split (ivy--split-negation (ivy--trim-trailing-re str)))
+         (+ve (ivy--split-spaces (nth 0 split)))
+         (-ve (ivy--split-spaces (nth 1 split)))
+         regex-parts)
+    ;; Include leading ("" . t) if there are only negative patterns,
+    ;; since there's a general assumption (e.g., `ivy-re-to-str')
+    ;; that the first pattern is positive.
+    (dolist (re (or +ve (and -ve '(""))))
+      (push (cons re t) regex-parts))
+    (dolist (re -ve)
+      (push (cons re nil) regex-parts))
+    (or (nreverse regex-parts) "")))
 
 (defun ivy--regex-plus (str)
   "Build a regex sequence from STR.
@@ -3124,7 +3124,8 @@ match.  Everything after \"!\" should not match."
       (0
        "")
       (1
-       (if (= (aref str 0) ?!)
+       ;; Fall back to ("" . t) if there are no positive patterns.
+       (if (= (string-to-char str) ?!)
            (list (cons "" t)
                  (list (ivy--regex (car parts))))
          (ivy--regex (car parts))))
@@ -3138,20 +3139,21 @@ match.  Everything after \"!\" should not match."
   "Build a regex sequence from STR.
 Insert .* between each char."
   (setq str (ivy--trim-trailing-re str))
-  (if (string-match "\\`\\(\\^?\\)\\(.*?\\)\\(\\$?\\)\\'" str)
-      (prog1
-          (concat (match-string 1 str)
-                  (let ((lst (string-to-list (match-string 2 str))))
-                    (apply #'concat
-                           (cl-mapcar
-                            #'concat
-                            (cons "" (cdr (mapcar (lambda (c) (format "[^%c\n]*" c))
-                                                  lst)))
-                            (mapcar (lambda (x) (format "\\(%s\\)" (regexp-quote (char-to-string x))))
-                                    lst))))
-                  (match-string 3 str))
-        (setq ivy--subexps (length (match-string 2 str))))
-    str))
+  (if (not (string-match "\\`\\(\\^\\)?\\(.*?\\)\\(\\$\\)?\\'" str))
+      str
+    (let* ((bol (match-string 1 str))
+           (s   (match-string 2 str))
+           (eol (match-string 3 str))
+           (lst (string-to-list s)))
+      (setq ivy--subexps (length s))
+      (concat bol
+              (when lst
+                (format "\\(%s\\)" (regexp-quote (char-to-string (car lst)))))
+              (mapconcat (lambda (c)
+                           (format "[^%c\n]*\\(%s\\)" c
+                                   (regexp-quote (char-to-string c))))
+                         (cdr lst) ())
+              eol))))
 
 (defcustom ivy-fixed-height-minibuffer nil
   "When non nil, fix the height of the minibuffer during ivy completion.
@@ -3560,13 +3562,20 @@ Should be run in the minibuffer."
     t))
 
 (defun ivy--dynamic-collection-cands (input)
-  (let ((coll (condition-case nil
-                  (funcall (ivy-state-collection ivy-last) input)
-                (error
-                 (funcall (ivy-state-collection ivy-last) input nil t)))))
-    (if (listp coll)
-        (mapcar (lambda (x) (if (consp x) (car x) x)) coll)
-      coll)))
+  "Try to return a list of all possible completions for INPUT string.
+The current completion table should be a function of either one
+argument (:dynamic-collection) or three (programmed completion).
+Note that the table may return a non-list value."
+  (let* ((coll (ivy-state-collection ivy-last))
+         (all (condition-case nil
+                  (funcall coll input)
+                (wrong-number-of-arguments
+                 (all-completions input coll)))))
+    (if (listp all)
+        ;; Return fresh list even if not an alist, just in case.
+        (mapcar (lambda (x) (if (consp x) (car x) x)) all)
+      ;; Can return zero when using async `ivy-update-candidates'.
+      all)))
 
 (defun ivy--update-minibuffer ()
   (prog1
@@ -3589,8 +3598,9 @@ Should be run in the minibuffer."
               (setq ivy--old-re nil)
               (setq in-progress t))
             (when (or ivy--all-candidates
-                      (not (or (get-process " *counsel*")
-                               in-progress)))
+                      (not (or in-progress
+                               (and (boundp 'counsel--async-bufname)
+                                    (get-process counsel--async-bufname)))))
               (ivy--set-index-dynamic-collection)
               (ivy--format ivy--all-candidates)))
         (cond (ivy--directory
@@ -3920,10 +3930,11 @@ Prefix matches to NAME are put ahead of the list."
   "Store the virtual buffers alist.")
 
 (defun ivy-re-to-str (re)
-  "Transform RE to a string.
+  "Convert RE into a string if not already one.
 
 Functions like `ivy--regex-ignore-order' return a cons list.
-This function extracts a string from the cons list."
+This function extracts the first regexp from the alist,
+which is assumed to be a positive pattern."
   (if (consp re) (caar re) re))
 
 (defun ivy-sort-function-buffer (name candidates)
@@ -4255,7 +4266,7 @@ with the extended highlighting of `ivy-format-function-line'."
   (when (consp ivy--old-re)
     (let ((i 1))
       (dolist (re ivy--old-re)
-        (when (string-match (car re) str)
+        (when (and (cdr re) (string-match (car re) str))
           (add-face-text-property
            (match-beginning 0) (match-end 0)
            (ivy--minibuffer-face i)
