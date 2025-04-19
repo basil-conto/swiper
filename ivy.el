@@ -930,6 +930,8 @@ will be called for each element of this list.")
 
 (defun ivy-read-action-ivy (actions)
   "Select an action from ACTIONS using Ivy."
+  ;; FIXME: add as command property instead?
+  ;; (info "(elisp) Recursive Mini")
   (let ((enable-recursive-minibuffers t))
     (if (and (> (minibuffer-depth) 1)
              (eq (ivy-state-caller ivy-last) 'ivy-read-action-ivy))
