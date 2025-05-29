@@ -1,0 +1,23 @@
+Affected:
+counsel-git-grep-function
+counsel-git-grep-proj-function
+counsel-git-log-function
+counsel-locate-function
+counsel-tracker-function
+counsel-fzf-function
+counsel-ag-function
+counsel-grep-function
+counsel-recoll-function
+
+Issues:
+#1659 counsel-rg --glob?
+
+#1800 ag --vimgrep columns break wgrep
+#1822 switch to pipes
+#2093 switch to ag --vimgrep
+
+Go over:
+- :grep-p, :unwind-fn, :display-transformer-fn
+  (why doesn't counsel-ack set them?)
+  possible to :parent 'counsel-ag?
+- counsel-ag API
