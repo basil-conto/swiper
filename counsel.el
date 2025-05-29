@@ -360,6 +360,7 @@ Give the process the functions SENTINEL and FILTER, which default
 to `counsel--async-sentinel' and `counsel--async-filter',
 respectively.  STDERR is as for `make-process'."
   (counsel-delete-process name)
+  (lwarn 'ivy :debug ">>> cmd: %S" cmd)
   (let ((proc (let* ((name (or name counsel--async-bufname))
                      (buf (get-buffer name))
                      (process-connection-type nil))
@@ -406,6 +407,9 @@ caused by spawning too many subprocesses too quickly."
    (ivy-alist-setting counsel-async-split-string-re-alist)
    t))
 
+(defvar warning-minimum-log-level)
+(setq warning-minimum-log-level :debug)
+
 (defun counsel--sync-sentinel-on-exit (process)
   (if (zerop (process-exit-status process))
       (let ((cur (ivy-state-current ivy-last))
@@ -415,7 +419,9 @@ caused by spawning too many subprocesses too quickly."
           (with-current-buffer (process-buffer process)
             (counsel--split-string))))
         (when start
-          (setq counsel--async-duration (time-to-seconds (time-since start))))
+          (setq counsel--async-duration (time-to-seconds (time-since start)))
+          (lwarn 'ivy :debug ">>> counsel duration: %s\n   cmd: %s"
+                 counsel--async-duration (process-command process)))
         (let ((re (ivy-re-to-str ivy-regex)))
           (if ivy--old-cands
               (if (eq (ivy-alist-setting ivy-index-functions-alist)
@@ -449,8 +455,15 @@ caused by spawning too many subprocesses too quickly."
 
 (defun counsel--async-sentinel (process _msg)
   "Sentinel function for an asynchronous counsel PROCESS."
-  (when (eq (process-status process) 'exit)
-    (counsel--sync-sentinel-on-exit process)))
+  (if (eq (process-status process) 'exit)
+      (counsel--sync-sentinel-on-exit process)
+    (lwarn 'ivy :debug "!!! counsel sentinel
+   cmd: %S
+   status: %S
+   exit: %S"
+           (process-command process)
+           (process-status process)
+           (process-exit-status process))))
 
 (defcustom counsel-async-filter-update-time 500000
   "The amount of microseconds to wait until updating `counsel--async-filter'."
