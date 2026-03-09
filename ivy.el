@@ -3931,6 +3931,7 @@ Prefix matches to NAME are put ahead of the list."
   (if (or (string= name "")
           (= (aref name 0) ?^))
       candidates
+    ;; FIXME: Doesn't handle other `ivy--regex-function'?
     (let ((re-prefix (concat "\\`" (funcall ivy--regex-function name)))
           res-prefix
           res-noprefix)
