@@ -1031,6 +1031,18 @@ Is is a cons cell, related to `tramp-get-completion-function'."
   "Compatibility shim for Emacs 30 `completion-metadata-get'.
 \n(fn METADATA PROP)")
 
+(defalias 'ivy--category-get
+  (cond ((fboundp 'completion-category-get)
+         ;; Since Emacs 31.
+         #'completion-category-get)
+        ((fboundp 'completion--category-override)
+         ;; Since Emacs 25.
+         #'completion--category-override)
+        ((lambda (cat prop)
+           (assq prop (cdr (assq cat completion-category-overrides))))))
+  "Compatibility shim for Emacs 31 `completion-category-get'.
+\n(fn CATEGORY PROP)")
+
 (defun ivy--completing-fname-p ()
   "Return non-nil when completing file names."
   (eq (ivy--metadata-get (ivy--metadata) 'category) 'file))
@@ -1180,30 +1192,38 @@ When this directory doesn't exist, return nil."
   "When non-nil, `ivy-partial-or-done' should insert a space."
   :type 'boolean)
 
+(defun ivy--cycle-p ()
+  "Return non-nil if completion commands should use cycling."
+  (let* ((cat (ivy--metadata-get (ivy--metadata) 'category))
+         (over (ivy--category-get cat 'cycle))
+         (cycle (if over (cdr over) completion-cycle-threshold)))
+    (or (eq cycle t)
+        (and (natnump cycle)
+             (null (nthcdr cycle ivy--all-candidates))))))
+
 (defun ivy-partial-or-done ()
   "Complete the minibuffer text as much as possible.
 If the text hasn't changed as a result, forward to `ivy-alt-done'."
   (interactive)
   (cond
-    ((and (numberp completion-cycle-threshold)
-          (< (length ivy--all-candidates) completion-cycle-threshold))
-     (let ((ivy-wrap t))
-       (ivy-next-line)))
-    ((and (eq (ivy-state-collection ivy-last) #'read-file-name-internal)
-          (or (and (equal ivy--directory "/")
-                   (string-match-p "\\`[^/]+:.*\\'" ivy-text))
-              (= (string-to-char ivy-text) ?/)))
-     (let ((default-directory ivy--directory)
-           dir)
-       (minibuffer-complete)
-       (ivy-set-text (ivy--input))
-       (when (setq dir (ivy-expand-file-if-directory ivy-text))
-         (ivy--cd dir))))
-    (t
-     (or (ivy-partial)
-         (when (or (eq this-command last-command)
-                   (eq ivy--length 1))
-           (ivy-alt-done))))))
+   ((ivy--cycle-p)
+    (let ((ivy-wrap t))
+      (ivy-next-line)))
+   ((and (eq (ivy-state-collection ivy-last) #'read-file-name-internal)
+         (or (and (equal ivy--directory "/")
+                  (string-match-p "\\`[^/]+:.*\\'" ivy-text))
+             (= (string-to-char ivy-text) ?/)))
+    (let ((default-directory ivy--directory)
+          dir)
+      (minibuffer-complete)
+      (ivy-set-text (ivy--input))
+      (when (setq dir (ivy-expand-file-if-directory ivy-text))
+        (ivy--cd dir))))
+   (t
+    (or (ivy-partial)
+        (when (or (eq this-command last-command)
+                  (eq ivy--length 1))
+          (ivy-alt-done))))))
 (ivy--no-M-x #'ivy-partial-or-done #'ivy--minibuffer-p)
 
 (defun ivy--partial-cd-for-single-directory ()
