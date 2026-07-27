@@ -636,10 +636,11 @@ N is obtained from `ivy-more-chars-alist'."
     (when (> diff 0)
       (list "" (format "%d chars more" diff)))))
 
-(defun ivy--case-fold-p (string)
-  "Return nil if STRING should be matched case-sensitively."
+(defun ivy--case-fold-p (string &optional regexp)
+  "Return nil if STRING should be matched case-sensitively.
+REGEXP non-nil means treat STRING as a regexp."
   (if (eq ivy-case-fold-search 'auto)
-      (string= string (downcase string))
+      (isearch-no-upper-case-p string regexp)
     ivy-case-fold-search))
 
 (defun ivy--case-fold-string= (s1 s2)
@@ -4035,7 +4036,7 @@ CANDS are the current candidates."
   (let ((caller (ivy-state-caller ivy-last))
         (func (or (ivy-alist-setting ivy-index-functions-alist)
                   #'ivy-recompute-index-zero))
-        (case-fold-search (ivy--case-fold-p re-str))
+        (case-fold-search (ivy--case-fold-p re-str t))
         (preselect (ivy-state-preselect ivy-last))
         (current (ivy-state-current ivy-last))
         (empty (string= re-str "")))
@@ -4442,7 +4443,7 @@ CANDS is a list of candidates that :display-transformer can turn into strings."
     (let* ((bnd (ivy--minibuffer-index-bounds
                  ivy--index ivy--length ivy-height))
            (wnd-cands (cl-subseq cands (car bnd) (cadr bnd)))
-           (case-fold-search (ivy--case-fold-p (ivy-re-to-str ivy-regex)))
+           (case-fold-search (ivy--case-fold-p (ivy-re-to-str ivy-regex) t))
            transformer-fn)
       (setq ivy--window-index (nth 2 bnd))
       (when (setq transformer-fn (ivy-state-display-transformer-fn ivy-last))
@@ -4968,9 +4969,14 @@ CANDS are the candidates to be displayed."
 (ivy-configure 'ivy-switch-buffer-other-window
   :parent 'ivy-switch-buffer)
 
-(defun ivy--yank-handle-case-fold (text)
+(defun ivy--yank-case-fold (text)
+  "Return TEXT with its case folded for yanking.
+Downcases TEXT depending on the current input and
+`ivy-case-fold-search'."
   (if (and (> (length ivy-text) 0)
-           (string= (downcase ivy-text) ivy-text))
+           ;; This seems more general than the default
+           ;; `not-yanks' value for `search-upper-case'.
+           (ivy--case-fold-p ivy-text))
       (downcase text)
     text))
 
@@ -4994,7 +5000,7 @@ point before and after applying FN to ARGS."
     (when text
       (insert (replace-regexp-in-string
                "  +" " "
-               (ivy--yank-handle-case-fold text)
+               (ivy--yank-case-fold text)
                t t)))))
 
 (defun ivy-yank-word (&optional arg)
