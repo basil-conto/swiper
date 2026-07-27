@@ -1139,6 +1139,55 @@ AUTHOR")))
   (should (equal (ivy--break-lines "\nfoo\n\^X\^X\^X\nbar\n" 6)
                  "\nfoo\n\^X\^X\^X\nbar\n")))
 
+(ert-deftest ivy--metadata ()
+  "Test `ivy--metadata' behavior."
+  (let* (md
+         (key "m")
+         (keys `((,key ,(lambda () (interactive) (setq md (ivy--metadata))))))
+         (empty '(metadata))
+         (nonempty '(metadata (foo . bar)))
+         (table (lambda (str pred act)
+                  (if (eq act 'metadata) nonempty
+                    (complete-with-action act () str pred)))))
+    ;; Ivy completion.
+    (should (equal (ivy-test-with keys ((ivy-read "" ()) md) key) empty))
+    ;; Dynamic Ivy completion.
+    (should (equal (ivy-test-with keys
+                     ((ivy-read "" (lambda (_)) :dynamic-collection t) md)
+                     key)
+                   empty))
+    ;; Programmed completion.
+    (should (equal (ivy-test-with keys
+                     ((ivy-read "" (completion-table-dynamic #'ignore)) md)
+                     key)
+                   empty))
+    ;; Programmed completion with metadata.
+    (should (equal (ivy-test-with keys ((ivy-read "" table) md) key)
+                   nonempty))
+    ;; Dynamic programmed completion with metadata.
+    (should (equal (ivy-test-with keys
+                     ((ivy-read "" table :dynamic-collection t) md)
+                     key)
+                   nonempty))))
+
+(ert-deftest ivy--completing-fname-p ()
+  "Test `ivy--completing-fname-p' behavior."
+  (let* (file
+         (key "f")
+         (keys `((,key ,(lambda ()
+                          (interactive)
+                          (setq file (ivy--completing-fname-p)))))))
+    (should-not (ivy-test-with keys ((ivy-read "" ()) file) key))
+    (should-not (ivy-test-with keys ((completing-read "" ()) file) key))
+    (should (ivy-test-with keys ((read-file-name "") file) key))
+    (let ((completing-read-function #'ivy-completing-read))
+      (should (ivy-test-with keys ((read-file-name "") file) key)))
+    (let ((table (lambda (str pred act)
+                   (if (eq act 'metadata)
+                       '(metadata (category . file))
+                     (complete-with-action act () str pred)))))
+      (should (ivy-test-with keys ((completing-read "" table) file) key)))))
+
 (ert-deftest ivy-avy ()
   (skip-unless (require 'avy nil t))
   (require 'ivy-avy)
