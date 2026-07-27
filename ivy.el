@@ -165,7 +165,8 @@ See also `https://github.com/abo-abo/swiper/wiki/ivy-display-function'."
                        (function :tag "Custom function"))))
 
 (defvar ivy-completing-read-dynamic-collection nil
-  "Run `ivy-completing-read' with `:dynamic-collection t`.")
+  "Treat `ivy-completing-read' as a `:dynamic-collection'.
+Intended to be let-bound as needed, not set globally.")
 
 (defcustom ivy-completing-read-handlers-alist
   '((tmm-menubar . completing-read-default)
@@ -1007,12 +1008,32 @@ Is is a cons cell, related to `tramp-get-completion-function'."
   "Customize what `ivy-alt-done' does per-collection."
   :type '(alist :key-type symbol :value-type function))
 
+(defun ivy--metadata ()
+  "Return `completion-metadata' for current `ivy-text'."
+  (let ((table (or minibuffer-completion-table
+                   (ivy-state-collection ivy-last)))
+        (pred (or minibuffer-completion-predicate
+                  (ivy-state-predicate ivy-last))))
+    (condition-case nil
+        (completion-metadata ivy-text table pred)
+      ;; In case of unary dynamic collection.
+      (wrong-number-of-arguments '(metadata)))))
+
+(defalias 'ivy--metadata-get
+  (if (>= emacs-major-version 30)
+      #'completion-metadata-get
+    (lambda (metadata prop)
+      (or (completion-metadata-get metadata prop)
+          (plist-get completion-extra-properties
+                     (or (get prop 'ivy--metadata-kwd)
+                         (put prop 'ivy--metadata-kwd
+                              (intern (concat ":" (symbol-name prop)))))))))
+  "Compatibility shim for Emacs 30 `completion-metadata-get'.
+\n(fn METADATA PROP)")
+
 (defun ivy--completing-fname-p ()
-  (let* ((table (ivy-state-collection ivy-last))
-         (md (condition-case nil
-                 (completion-metadata ivy-text table nil)
-               (error '(metadata)))))
-    (eq (ivy--metadata-get md 'category) 'file)))
+  "Return non-nil when completing file names."
+  (eq (ivy--metadata-get (ivy--metadata) 'category) 'file))
 
 (defun ivy-alt-done (&optional arg)
   "Exit the minibuffer with the selected candidate.
@@ -4410,22 +4431,8 @@ CANDS is a list of candidates that :display-transformer can turn into strings."
             (setq wnd-cands (mapcar transformer-fn wnd-cands)))))
       (ivy--wnd-cands-to-str wnd-cands))))
 
-(defalias 'ivy--metadata-get
-  (if (>= emacs-major-version 30)
-      #'completion-metadata-get
-    (lambda (metadata prop)
-      (or (completion-metadata-get metadata prop)
-          (plist-get completion-extra-properties
-                     (or (get prop 'ivy--metadata-kwd)
-                         (put prop 'ivy--metadata-kwd
-                              (intern (concat ":" (symbol-name prop)))))))))
-  "Compatibility shim for Emacs 30 `completion-metadata-get'.
-\n(fn METADATA PROP)")
-
 (defun ivy--wnd-cands-to-str (wnd-cands)
-  (let* ((metadata (unless (ivy-state-dynamic-collection ivy-last)
-                     (completion-metadata "" minibuffer-completion-table
-                                          minibuffer-completion-predicate)))
+  (let* ((metadata (ivy--metadata))
          (affix (ivy--metadata-get metadata 'affixation-function))
          (annot (or affix (ivy--metadata-get metadata 'annotation-function)))
          (fmt (cond (affix
