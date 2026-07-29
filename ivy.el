@@ -3628,13 +3628,30 @@ Should be run in the minibuffer."
     t))
 
 (defun ivy--dynamic-collection-cands (input)
-  (let ((coll (condition-case nil
-                  (funcall (ivy-state-collection ivy-last) input)
-                (error
-                 (funcall (ivy-state-collection ivy-last) input nil t)))))
-    (if (listp coll)
-        (mapcar (lambda (x) (if (consp x) (car x) x)) coll)
-      coll)))
+  "Try to return a list of all dynamic completions for INPUT string.
+The current completion table should be a function of either one
+argument (`:dynamic-collection') or three (programmed completion).
+The table may return a non-list value such as zero."
+  (let* (programmed
+         (table (or minibuffer-completion-table
+                    (ivy-state-collection ivy-last)))
+         (pred (or minibuffer-completion-predicate
+                   (ivy-state-predicate ivy-last)))
+         (all (condition-case nil
+                  (funcall table input)
+                (wrong-number-of-arguments
+                 (setq programmed t)))))
+    (cond (programmed (all-completions input table pred))
+          ;; Can return zero when using async `ivy-update-candidates'.
+          ((atom all) all)
+          ;; Can't use `all-completions' because dynamic collections
+          ;; like `swiper-isearch' return non-string candidates.
+          (pred (cl-mapcan (lambda (x)
+                             (and (funcall pred x)
+                                  (list (if (consp x) (car x) x))))
+                           all))
+          ;; Return fresh list even if not an alist, just in case.
+          ((mapcar (lambda (x) (if (consp x) (car x) x)) all)))))
 
 (defun ivy--update-minibuffer ()
   (prog1
