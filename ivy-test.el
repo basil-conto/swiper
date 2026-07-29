@@ -1268,6 +1268,55 @@ AUTHOR")))
         (should (equal (ivy-test-with () ((ivy-read "" mdcoll)) "TAB RET")
                        "a"))))))
 
+(ert-deftest ivy--dynamic-collection-cands ()
+  "Test `ivy--dynamic-collection-cands' and related behavior."
+  (let* ((nums '(("0") ("1") ("2")))                 ; Plain.
+         (ivynums (lambda (_) nums))                 ; Ivy dynamic.
+         (dynums (completion-table-dynamic ivynums)) ; Programmed.
+         (pred (lambda (x) (not (equal x '("1"))))))
+    ;; Unfiltered Ivy dynamic collection.
+    (should (equal (ivy-test-with ()
+                     ((ivy-read "" ivynums :dynamic-collection t)
+                      ivy--all-candidates)
+                     "RET")
+                   '("0" "1" "2")))
+    ;; Filtered Ivy dynamic collection.
+    (should (equal (ivy-test-with ()
+                     ((ivy-read "" ivynums
+                                :predicate pred
+                                :dynamic-collection t)
+                      ivy--all-candidates)
+                     "RET")
+                   '("0" "2")))
+    (dolist (dyn '(nil t))
+      ;; Unfiltered programmed completion, optionally dynamic.
+      (should (equal (ivy-test-with ()
+                       ((ivy-read "" dynums :dynamic-collection dyn)
+                        ivy--all-candidates)
+                       "RET")
+                     '("0" "1" "2")))
+      ;; Filtered programmed completion, optionally dynamic.
+      (should (equal (ivy-test-with ()
+                       ((ivy-read "" dynums
+                                  :predicate pred
+                                  :dynamic-collection dyn)
+                        ivy--all-candidates)
+                       "RET")
+                     '("0" "2")))
+      ;; The same but via `completing-read'.
+      (let ((completing-read-function #'ivy-completing-read)
+            (ivy-completing-read-dynamic-collection dyn))
+        (should (equal (ivy-test-with ()
+                         ((completing-read "" (if dyn dynums nums))
+                          ivy--all-candidates)
+                         "RET")
+                       '("0" "1" "2")))
+        (should (equal (ivy-test-with ()
+                         ((completing-read "" (if dyn dynums nums) pred)
+                          ivy--all-candidates)
+                         "RET")
+                       '("0" "2")))))))
+
 (ert-deftest ivy-avy ()
   (skip-unless (require 'avy nil t))
   (require 'ivy-avy)
