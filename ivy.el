@@ -2695,7 +2695,7 @@ INHERIT-INPUT-METHOD is currently ignored."
       (let ((str (ivy-read
                   prompt collection
                   :predicate predicate
-                  :require-match (and collection require-match)
+                  :require-match require-match
                   :initial-input
                   (cond ((consp initial-input)
                          (car initial-input))
