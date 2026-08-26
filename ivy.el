@@ -2386,8 +2386,9 @@ customizations apply to the current completion session."
                            caller))))
         (when session
           (setf (ivy-state-extra-props ivy-last)
-                (plist-put extra-props :ivy-data `(:all-candidates ,ivy--all-candidates
-                                                   :text ,ivy-text)))
+                (plist-put (copy-sequence extra-props)
+                           :ivy-data `( :all-candidates ,ivy--all-candidates
+                                        :text ,ivy-text)))
           (ivy--alist-set 'ivy--sessions session ivy-last)))
       (ivy--cleanup))
     (ivy-call)))
