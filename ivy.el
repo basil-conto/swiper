@@ -1057,7 +1057,6 @@ of exiting.  This function is otherwise like `ivy-done'."
   (interactive "P")
   (setq ivy-current-prefix-arg current-prefix-arg)
   (let (alt-done-fn)
-    ;; CHECK
     (cond ((or arg (ivy--prompt-selected-p))
            (ivy-immediate-done))
           ((setq alt-done-fn (ivy-alist-setting ivy-alt-done-functions-alist))
@@ -1126,6 +1125,7 @@ contains a single candidate.")
 (defun ivy--directory-done ()
   "Handle exit from the minibuffer when completing file names."
   (let ((dir (ivy--handle-directory ivy-text)))
+    ;; CHECK
     (cond (dir
            (let ((inhibit-message t))
              (ivy--cd dir)))
@@ -1205,6 +1205,7 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
    ((ivy--cycle-p)
     (let ((ivy-wrap t))
       (ivy-next-line)))
+   ;; CHECK
    ((and (eq (ivy-state-collection ivy-last) #'read-file-name-internal)
          (or (and (equal ivy--directory "/")
                   (string-match-p "\\`[^/]+:.*\\'" ivy-text))
@@ -1222,6 +1223,7 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
           (ivy-alt-done))))))
 (ivy--no-M-x #'ivy-partial-or-done #'ivy--minibuffer-p)
 
+;; CHECK
 (defun ivy--partial-cd-for-single-directory ()
   (when (and
          (eq (ivy-state-collection ivy-last) #'read-file-name-internal)
@@ -1291,6 +1293,7 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
         (cond ((or (not ivy--directory)
                    (eq (ivy-state-history ivy-last) 'grep-files-history))
                ivy-text)
+              ;; CHECK
               ((and (string= ivy-text "")
                     (eq (ivy-state-collection ivy-last)
                         #'read-file-name-internal))
@@ -2149,6 +2152,7 @@ The child caller inherits and can override the settings of the parent.")
 ;; Moved to subr.el in Emacs 27.1.
 (autoload 'xor "array")
 
+;; CHECK
 (defun ivy--sorted-files (dir)
   "Return the list of files in DIR.
 Directories come first."
@@ -2489,6 +2493,7 @@ This is useful for recursive `ivy-read'."
                                (delete-dups
                                 (all-completions "(" collection predicate)))
                      (all-completions "" collection predicate))))
+            ;; CHECK
             ((memq collection '(read-file-name-internal ffap-read-file-or-url-internal))
              (require 'tramp)
              (when (and (equal def initial-input)
