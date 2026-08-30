@@ -1057,7 +1057,6 @@ of exiting.  This function is otherwise like `ivy-done'."
   (interactive "P")
   (setq ivy-current-prefix-arg current-prefix-arg)
   (let (alt-done-fn)
-    ;; CHECK
     (cond ((or arg (ivy--prompt-selected-p))
            (ivy-immediate-done))
           ((setq alt-done-fn (ivy-alist-setting ivy-alt-done-functions-alist))
@@ -1126,6 +1125,7 @@ contains a single candidate.")
 (defun ivy--directory-done ()
   "Handle exit from the minibuffer when completing file names."
   (let ((dir (ivy--handle-directory ivy-text)))
+    ;; CHECK
     (cond (dir
            (let ((inhibit-message t))
              (ivy--cd dir)))
