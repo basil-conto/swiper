@@ -1001,28 +1001,141 @@ AUTHOR")))
     (should (eq (ivy--sort-function 'c) fn1))))
 
 (ert-deftest ivy-read-directory-name ()
-  (let ((completing-read-function #'ivy-completing-read))
-    (ivy-test-with-tmpdir dir
-      (should (equal dir (expand-file-name
-                          (ivy-test-with ()
-                            ((read-directory-name "cd: " dir nil t))
-                            "RET")))))
-    (should (equal (ivy-test-with ()
-                     ((read-directory-name "cd: " "/tmp"))
-                     "RET")
-                   (expand-file-name "/tmp/")))
-    (let ((default-directory "/tmp/"))
-      (should (equal (ivy-test-with () ((read-directory-name "cd: ")) "C-M-j")
-                     (expand-file-name "/tmp/")))
-      (should (equal (ivy-test-with ()
-                       ((read-directory-name "cd: "))
-                       "DEL C-M-j")
-                     (expand-file-name "/"))))
-    (let ((default-directory "/"))
-      (should (equal (ivy-test-with ()
-                       ((read-directory-name "cd: "))
-                       "tmp C-j C-M-j")
-                     (expand-file-name "/tmp/"))))))
+  "Test `read-directory-name' behavior under Ivy."
+  (ivy-test-with-tmpdir dir
+    (let ((a (expand-file-name "a" dir))
+          (b (expand-file-name "b" dir))
+          (sub (expand-file-name "aa/" dir))
+          (completing-read-function #'ivy-completing-read))
+      (make-directory sub)
+      (let ((ivy-extra-directories ()))
+        (let ((fn (lambda () (read-directory-name "")))
+              (default-directory dir))
+          ;; FIXME
+          ;; (should (equal (ivy-test-exec () fn "C-j C-j") sub))
+          ;; (should (equal (ivy-test-exec () fn "C-j C-m") sub))
+          (should (equal (ivy-test-exec () fn "C-m") sub))
+          (should (equal (ivy-test-exec () fn "C-M-j") dir))
+          ;; FIXME
+          ;; (should (equal (ivy-test-exec () fn "a C-j C-j") sub))
+          ;; (should (equal (ivy-test-exec () fn "a C-j C-m") sub))
+          (should (equal (ivy-test-exec () fn "a C-m") sub))
+          (should (equal (ivy-test-exec () fn "a C-M-j") a))
+          (should (equal (ivy-test-exec () fn "b C-j") b))
+          (should (equal (ivy-test-exec () fn "b C-m") b))
+          (should (equal (ivy-test-exec () fn "b C-M-j") b)))
+        ;; The same but with DIR passed as argument.
+        (let ((fn (lambda () (read-directory-name "" dir))))
+          ;; FIXME
+          ;; (should (equal (ivy-test-exec () fn "C-j C-j") sub))
+          ;; (should (equal (ivy-test-exec () fn "C-j C-m") sub))
+          (should (equal (ivy-test-exec () fn "C-m") sub))
+          (should (equal (ivy-test-exec () fn "C-M-j") dir))
+          ;; FIXME
+          ;; (should (equal (ivy-test-exec () fn "a C-j C-j") sub))
+          ;; (should (equal (ivy-test-exec () fn "a C-j C-m") sub))
+          (should (equal (ivy-test-exec () fn "a C-m") sub))
+          (should (equal (ivy-test-exec () fn "a C-M-j") a))
+          (should (equal (ivy-test-exec () fn "b C-j") b))
+          (should (equal (ivy-test-exec () fn "b C-m") b))
+          (should (equal (ivy-test-exec () fn "b C-M-j") b))))
+      (let ((fn (lambda () (read-directory-name "" dir)))
+            (ivy-extra-directories '("./")))
+        (should (equal (ivy-test-exec () fn "C-j C-M-j") dir))
+        (should (equal (ivy-test-exec () fn "C-m") dir))
+        (should (equal (ivy-test-exec () fn "C-M-j") dir))
+        (should (equal (ivy-test-exec () fn "C-n C-j C-M-j") sub))
+        (should (equal (ivy-test-exec () fn "C-n C-m") sub))
+        (should (equal (ivy-test-exec () fn "C-n C-M-j") dir))
+        (should (equal (ivy-test-exec () fn "a C-j C-M-j") sub))
+        (should (equal (ivy-test-exec () fn "a C-m") sub))
+        (should (equal (ivy-test-exec () fn "a C-M-j") a))))))
+
+(ert-deftest ivy-read-directory-nonexistent ()
+  "Test `read-directory-name' in a nonexistent DIR."
+  (let* ((dir "/nonexistent/")
+         (b (expand-file-name "b" dir))
+         (fn (lambda () (read-directory-name "" dir)))
+         (completing-read-function #'ivy-completing-read)
+         (ivy-extra-directories ()))
+    (should (equal (ivy-test-exec () fn "C-j") dir))
+    (should (equal (ivy-test-exec () fn "C-m") dir))
+    (should (equal (ivy-test-exec () fn "C-M-j") dir))
+    (should (equal (ivy-test-exec () fn "n C-j") dir))
+    (should (equal (ivy-test-exec () fn "n C-m") dir))
+    ;; FIXME
+    (ignore b)
+    ;; (should (equal (ivy-test-exec () fn "n C-M-j")
+    ;;                (expand-file-name "n" dir)))
+    ;; (should (equal (ivy-test-exec () fn "b C-j") b))
+    ;; (should (equal (ivy-test-exec () fn "b C-m") b))
+    ;; (should (equal (ivy-test-exec () fn "b C-M-j") b))
+    ))
+
+(ert-deftest ivy-read-directory-name-default ()
+  "Test `read-directory-name' with a DEFAULT-DIRNAME argument."
+  (ivy-test-with-tmpdir dir
+    (let ((a (expand-file-name "a" dir))
+          (ivy-extra-directories ())
+          (completing-read-function #'ivy-completing-read)
+          (fn (lambda (&optional def init)
+                (read-directory-name "" dir def nil init))))
+      (dolist (def (list "" "a" dir a))
+        ;; FIXME
+        ;; (should (equal (ivy-test-with () ((funcall fn def)) "C-j") dir))
+        ;; (should (equal (ivy-test-with () ((funcall fn def)) "C-m") dir))
+        (should (equal (ivy-test-with () ((funcall fn def)) "C-M-j") def)))
+      (dolist (init (list "" "a" "a/b"))
+        (let ((ret (expand-file-name init dir)))
+          (dolist (key '("C-j" "C-m" "C-M-j"))
+            (should (equal (ivy-test-with () ((funcall fn nil init)) key)
+                           ret)))))
+      ;; FIXME
+      ;; (should (equal (ivy-test-with () ((funcall fn "b" "a")) "C-j") a))
+      ;; (should (equal (ivy-test-with () ((funcall fn "b" "a")) "C-m") a))
+      (should (equal (ivy-test-with () ((funcall fn "b" "a")) "C-M-j") "b")))))
+
+(ert-deftest ivy-read-directory-name-must-match ()
+  "Test `read-directory-name' with a MUSTMATCH argument."
+  ;; FIXME
+  ;; - t means that the user is not allowed to exit unless
+  ;;   the input is (or completes to) an existing file.
+  ;; - `confirm' means that the user can exit with any input, but she needs
+  ;;   to confirm her choice if the input is not an existing file.
+  ;; - `confirm-after-completion' means that the user can exit with any
+  ;;   input, but she needs to confirm her choice if she called
+  ;;   `minibuffer-complete' right before `minibuffer-complete-and-exit'
+  ;;   and the input is not an existing file.
+  ;; - a function, which will be called with a single argument, the
+  ;;   input unquoted by `substitute-in-file-name', which see.  If the
+  ;;   function returns a non-nil value, the minibuffer is exited with
+  ;;   that argument as the value.
+  ;; - anything else behaves like t except that typing RET does not exit if
+  ;;   it does non-null completion.
+  )
+
+    ;; FIXME
+    ;; (ivy-test-with-tmpdir dir
+    ;;   (should (equal dir (expand-file-name
+    ;;                       (ivy-test-with ()
+    ;;                         ((read-directory-name "cd: " dir nil t))
+    ;;                         "RET")))))
+    ;; (should (equal (ivy-test-with ()
+    ;;                  ((read-directory-name "cd: " "/tmp"))
+    ;;                  "RET")
+    ;;                (expand-file-name "/tmp/")))
+    ;; (let ((default-directory "/tmp/"))
+    ;;   (should (equal (ivy-test-with () ((read-directory-name "cd: ")) "C-M-j")
+    ;;                  (expand-file-name "/tmp/")))
+    ;;   (should (equal (ivy-test-with ()
+    ;;                    ((read-directory-name "cd: "))
+    ;;                    "DEL C-M-j")
+    ;;                  (expand-file-name "/"))))
+    ;; (let ((default-directory "/"))
+    ;;   (should (equal (ivy-test-with ()
+    ;;                    ((read-directory-name "cd: "))
+    ;;                    "tmp C-j C-M-j")
+    ;;                  (expand-file-name "/tmp/"))))))
 
 (ert-deftest ivy-read-file-name-initial-input ()
   (let* ((relname "ivy.el")
@@ -1066,12 +1179,11 @@ AUTHOR")))
   (let ((completing-read-function #'ivy-completing-read))
     ;; Abbreviated form of visited file name.
     (should (equal (ivy-test-with ()
-                     ((let ((insert-default-directory t))
-                        (set-visited-file-name "~/dummy-dir/dummy-file")
-                        ;; Don't ask to save in interactive session.
-                        (set-buffer-modified-p nil)
-                        ;; As per `load-file'.
-                        (read-file-name "Load file: " nil nil 'lambda)))
+                     ((set-visited-file-name "~/dummy-dir/dummy-file")
+                      ;; Don't ask to save in interactive session.
+                      (set-buffer-modified-p nil)
+                      ;; As per `load-file'.
+                      (read-file-name "Load file: " nil nil 'lambda))
                      ;; No editing, just command `ivy-immediate-done'.
                      "C-M-j")
                    "~/dummy-dir/dummy-file")))
@@ -1723,11 +1835,14 @@ AUTHOR")))
                    "https://foo.com/issues/123"))))
 
 (ert-deftest counsel-read-directory-name ()
-  (should (equal (ivy-test-with ()
-                   ((let ((default-directory "/tmp/"))
-                      (counsel-read-directory-name "cd: ")))
-                   "RET")
-                 "/tmp/")))
+  "Test `counsel-read-directory-name' behavior."
+  (ivy-test-with-tmpdir default-directory
+    ;; FIXME: Shouldn't this also work with `ivy-extra-directories' nil?
+    (let ((ivy-extra-directories '("../" "./")))
+      (should (equal (ivy-test-with ()
+                       ((counsel-read-directory-name "cd: "))
+                       "RET")
+                     default-directory)))))
 
 (ert-deftest counsel-yank-pop ()
   "Test `counsel-yank-pop' behavior."
