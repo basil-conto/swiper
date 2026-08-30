@@ -1126,13 +1126,7 @@ contains a single candidate.")
 (defun ivy--directory-done ()
   "Handle exit from the minibuffer when completing file names."
   (let ((dir (ivy--handle-directory ivy-text)))
-    (cond ((equal (ivy-state-current ivy-last) (ivy-state-def ivy-last))
-           (ivy-done))
-          ((and (ivy-state-require-match ivy-last)
-                (equal ivy-text "")
-                (null ivy--old-cands))
-           (ivy-immediate-done))
-          (dir
+    (cond (dir
            (let ((inhibit-message t))
              (ivy--cd dir)))
           ((ivy--directory-enter))
